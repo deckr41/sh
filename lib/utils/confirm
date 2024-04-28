@@ -1,0 +1,75 @@
+#!/usr/bin/env sh
+
+# NAME
+#  confirm - Fancy confirmation message powered by fzf
+#
+# SYNOPSIS
+#  confirm [-hc|--has-cancel] [-nc|--no-confirm] <message>
+#
+# FLAGS 
+#  [-hc|--has-cancel]
+#   Add a "cancel" option to the confirmation message
+#
+#  [-nc|--no-confirm]
+#   Do not ask for confirmation, return "yes" immediately
+#
+# ARGUMENTS
+#  <message>
+#   The question to ask for confirmation
+#
+# ENVIRONMENT
+#  SH41_UTILS
+
+if [ -z "$SH41_UTILS" ]; then
+  echo "SH41_UTILS environment variable is not set" >&2
+  exit 1
+fi
+
+if ! command -v fzf >/dev/null 2>&1; then
+  echo "fzf is required to run this script" >&2
+  exit 1
+fi
+
+# ╭───┤ Argument parsing
+# ╰─
+
+allow_cancel=""
+no_confirm=""
+options="✔ yes\n✖ no"
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -nc|--no-confirm) no_confirm="true" ;;
+    -hc|--has-cancel) allow_cancel="true" ;;
+    *) break ;;
+  esac
+  shift
+done
+
+if [ -n "$no_confirm" ] || [ -n "$CI" ]; then
+  printf "yes"
+  exit 0
+fi
+
+# ╭───┤ Main
+# ╰─
+
+question="${1:-Are you sure?}"; 
+
+if [ -n "$allow_cancel" ]; then
+  options="$options\n󰜺 cancel"
+fi
+
+answer=$(echo "$options" | "$SH41_UTILS"/choose --prompt "$question")
+if [ "$?" -ne 0 ] && [ -z "$answer" ]; then
+  [ -n "$allow_cancel" ] && printf "cancel" || printf "no"
+  exit 1
+else
+  answer=$(echo "$answer" | tr -d '\n' | awk '{print $1}')
+fi
+
+printf "%s" "$answer"
+
+if [ "$answer" != "yes" ]; then
+  exit 1
+fi

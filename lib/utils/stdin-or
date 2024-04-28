@@ -1,0 +1,42 @@
+#!/usr/bin/env sh
+
+# NAME
+#  stdin_or - Function to read from stdin or use passed arguments as fallback
+#
+# SYNOPSIS
+#  stdin_or [ARGUMENTS]...
+#
+# DESCRIPTION
+#  This function reads from the standard input (stdin) and outputs it as is. 
+#  However, if there is no input (i.e., if the script is run interactively or 
+#  not receiving input from a pipeline), it will instead return the arguments 
+#  passed to the function. This allows for a default behavior in scripts where 
+#  the presence of input data can change the flow of execution.
+#
+# EXAMPLES
+#  stdin_data=$(echo "input data" | stdin_or "default value")
+#  # -> "input data"
+#
+#  stdin_data=$(stdin_or "default value")
+#  # -> "default value"
+#
+#  stdin_data=$(stdin_or "default value" "one more value")
+#  # -> "default value one more value"
+stdin_or() {
+  # If stdin is a terminal, return the arguments
+  if [ -t 0 ]; then 
+    printf "%s" "$@"
+    exit 0
+  fi
+
+  # Otherwise, read from stdin
+  input=$(cat /dev/stdin)
+
+  # If there is no input, also return the arguments
+  if [ -z "$input" ]; then
+    printf "%s" "$@"
+  else
+    printf "%s" "$input"
+  fi
+}
+

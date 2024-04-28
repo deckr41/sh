@@ -1,0 +1,162 @@
+#!/usr/bin/env sh
+
+# NAME
+#  sh41-prompt-build - Build a provider agnostic JSON conversation structure.
+#
+# SYNOPSIS
+#  sh41-prompt-build [-f|--file <file_path>] [-v|--var <name> <value>]
+#
+# DESCRIPTION
+#  Internal subcommand for building a JSON conversation structure based on a
+#  given prompt. 
+#
+#  The prompt can contain template keys, {{ key }}, that are replaced with
+#  values passed as additional context.
+#
+# OPTIONS
+#  -v|--var <key> <value>
+#   Additional context sent together with the prompt. Must be a key-value pair
+#   where the key can be referenced and interpolated in the prompt 
+#   via {{ key }}.
+#   
+#   If a key is not present in the prompt, the value will be appended as a
+#   separate 'system' message in the JSON messages array.
+#
+#  -f|--file <file_path>
+#   Additional context sent together with the prompt. The file content is
+#   appended as a separate 'system' message in the JSON messages array.
+#
+# EXAMPLES 
+#  $ prompt="what is the meaning of life?" 
+#  $ echo "$prompt" | sh41-prompt-build 
+#  {
+#    conversation_id: "uuid",
+#    messages: [{ 
+#     "role": "user", 
+#     "content":"what is the meaning of life?"
+#    }]
+#  }
+#
+#  $ prompt="{{ name }}, what is the meaning of life?"
+#  $ echo "$prompt" | sh41-prompt-build --var name "John"
+#  {
+#    conversation_id: "uuid",
+#    total_token_count: 9,
+#    messages: [{ 
+#     "role": "user", 
+#     "content":"John, what is the meaning of life?"
+#    }]
+#  }
+#
+# ERROR CODES
+#  1 - Argument/flag parsing error
+#  2 - File not found
+#  
+# SEE ALSO
+#  jq(1)
+
+# ╭───┤ Global variables
+# ╰─
+
+CMD_NAME="sh41-prompt-build"
+INPUT_PROMPT=$(cat)
+OUTPUT_CONVERSATION="{
+  \"conversation_id\": \"$(uuidgen)\",
+  \"messages\": []
+}"
+
+# ╭───┤ Functions
+# ╰─
+
+log_error() { 
+  # Redirect stdin from /dev/tty to ensure it's treated as interactive
+  # and not inherited from parent's stdin
+  "$SH41_UTILS"/log "$@" "$CMD_NAME" < /dev/tty
+}
+
+# Interpolate the given key with a value in the global $INPUT_PROMPT.
+#
+# ERROR CODES
+#  3 variable not found in source string
+interpolate_prompt() {
+  # Escape the key for use in an awk regex, handling keys that may contain
+  # special characters.
+  escaped_key=$(printf '%s' "$1" | sed "s/[.[\*^$()]/\\&/g")
+  value="$2"
+
+  # Check for the presence of the key in the template.
+  if ! printf '%s' "$INPUT_PROMPT" | grep -Eq "\{\{\s*$escaped_key\s*\}\}"; then
+    exit 3
+  fi
+
+  # Perform the replacement.
+  INPUT_PROMPT=$(
+    printf '%s' "$INPUT_PROMPT" \
+      | awk -v key="$escaped_key" -v val="$value" '{
+          gsub(/\{\{\s*'"$escaped_key"'\s*\}\}/, val);
+          print
+        }'
+  )
+}
+
+# ╭───┤ Argument parsing & input validation
+# ╰─
+
+
+if [ -z "$INPUT_PROMPT" ]; then
+  log_error "Missing prompt input, must be piped in."
+  exit 1
+fi
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -f|--file)
+      if [ "$2" ] && [ "${2#-}" = "$2" ]; then
+        file_path="$2"; shift
+      else
+        log_error "-f|--file flag requires a value"
+        exit 1
+      fi
+
+      if [ ! -f "$file_path" ]; then
+        log_error "-f|--file $file_path not found"
+        exit 2
+      fi
+
+      OUTPUT_CONVERSATION=$(printf '%s' "$OUTPUT_CONVERSATION" \
+        | "$SH41_LIBS"/prompt/append --file "$file_path")
+    ;;
+    -v|--var)
+      if [ "$2" ] && [ "${2#-}" = "$2" ]; then
+        key=$2; shift
+      else
+        log_error "--var flag requires a key"
+        exit 1
+      fi
+
+      if [ "${2#-}" = "$2" ]; then
+        value="$2"; shift
+      fi
+
+      interpolate_prompt "$key" "$value"
+      
+      # Key not found in prompt, adding data as separate message
+      if [ $? -eq 3 ]; then
+        OUTPUT_CONVERSATION=$(printf '%s' "$OUTPUT_CONVERSATION" \
+          | "$SH41_LIBS"/prompt/append --role "context" --content "$key: $value")
+      fi
+    ;;
+    --) shift; break ;;
+    -?*) log_error "unknown flag $1"; exit 1 ;;
+    *) break ;;
+  esac
+  shift
+done
+
+# ╭──────────────────────
+# │ Main. Start here.
+# ╰────────
+
+printf '%s' "$OUTPUT_CONVERSATION" \
+  | "$SH41_LIBS"/prompt/append --role "user" --content "$INPUT_PROMPT"
+

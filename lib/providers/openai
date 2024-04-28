@@ -1,0 +1,243 @@
+#!/usr/bin/env sh
+
+# NAME
+#  openai-send - Interface for OpenAI's /chat/completions endpoint.
+#
+# SYNOPSIS
+#  openai-send <-m|--messages> <messages> [--no-stream] 
+#
+# DESCRIPTION
+#  Low-level script calling the OpenAI API to get completions for a given
+#  message chain.
+#
+#  See the OpenAI API reference for more details:
+#  https://platform.openai.com/docs/api-reference/chat
+#
+# OPTIONS
+#  -t|--temperature <temperature=0.7>
+#   The sampling temperature to use when generating completions.
+#   Higher values mean the model will take more risks.
+#
+#  --model <model=gpt-4-turbo-preview>
+#   The model to use for generating completions.
+#
+#  -m|--messages <messages>
+#   JSON array of objects with `role` and `content` fields.
+#
+#  --no-stream
+#   Disable streaming response.
+#
+#  --debug
+#   Enable debug mode.
+#
+#  --raw
+#   Output raw response from OpenAI without any processing
+#
+# ENVIRONMENT
+#  OPENAI_API_KEY
+#   The API key used for authenticating with the OpenAI API. 
+#
+#  OPENAI_ORG_ID
+#   The organization ID used for authenticating with the OpenAI API.
+#
+# ERROR CODES
+#  1 - Missing required environment variables
+#  2 - Missing dependencies
+#  3 - Argument/flag parsing error
+# 
+# SEE ALSO
+#  curl(1), jq(1)
+
+CMD_NAME="openai"
+
+# ╭───┤ Dependency check
+# ╰─ 
+
+if [ -z "$OPENAI_API_KEY" ]; then
+  log_error "missing required environment variable OPENAI_API_KEY"
+  exit 1
+fi
+
+if ! command -v "jq" >/dev/null 2>&1; then
+  log_error "jq is required to run this script"
+  exit 2
+fi
+
+if ! command -v "curl" >/dev/null 2>&1; then
+  log_error "curl is required to run this script"
+  exit 2
+fi
+
+# ╭───┤ Functions
+# ╰─
+
+# Redirect stdin from /dev/tty to ensure it's treated as interactive
+# and not inherited from parent's stdin
+log_error() { "$SH41_UTILS"/log "$@" "$CMD_NAME" < /dev/tty; }
+log_info() { "$SH41_UTILS"/log --type info "$@" "$CMD_NAME" < /dev/tty; }
+
+# Extract the content from the streamed response chunks.
+# - When streaming, OpenAI sends multiple JSON objects with the content of the
+# completion.
+# - Each chunk contains the string "data: {...}" followed by the JSON object.
+# - Last chunk, marking the end of the stream, contains the string "[DONE]".
+#
+# If the JSON object does not contain a `.choices[0].delta.content` field,
+# assume it's a system/error message and return the entire object.
+extract_streaming_content() {
+  sed --unbuffered --regexp-extended \
+    -e 's/^data: //g' \
+    -e 's/\[DONE\]//g' \
+    | jq --unbuffered --raw-output --join-output \
+    'if .choices[0].delta != null then 
+      .choices[0].delta.content // ""
+     else 
+       .
+     end'
+}
+
+# Extract the content string from the non-streamed response.
+#
+# If the JSON object does not contain a `.choices[0].message.content` field,
+# assume it's a system/error message and return the entire object.
+extract_content() {
+  jq --unbuffered --raw-output --join-output \
+    '.choices[0].message.content // .'
+}
+
+# Transform SH41 prompt to the OpenAI compatible message schema.
+# 
+# From:
+# {
+#   conversation_id: "uuid",
+#   messages: [{
+#     role: "context" | "prompt" | "file" | "system_main-agent-mission" | "system_main-user-mission",
+#     path: "string" | null,
+#     content: "string"
+#   }]
+# }
+#
+# To:
+#  [{
+#    role: "system" | "user",
+#    content: "string"
+#  }]
+mutate() {
+  jq \
+    'def toOpenAIRole:
+      if . == "context" or (. | test("^system_")) or . == "file"
+      then "system"
+      else "user"
+    end;
+
+    .messages | map(
+      {
+        role: .role | toOpenAIRole,
+        content: .content
+      }
+    )'
+}
+
+# ╭───┤ Input validation
+# ╰─
+
+should_stream="true"
+should_output_raw=""
+is_debug="$SH41_DEBUG"
+model="gpt-4-turbo-preview"
+temperature="0.7"
+max_tokens="4096"
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    --raw)
+      should_output_raw="true"
+    ;;
+    --debug)
+      is_debug="true"
+    ;;
+    --no-stream)
+      should_stream=""
+    ;;
+    -mt|--max-tokens)
+      if [ "$2" ] && [ "${2#-}" = "$2" ]; then
+        max_tokens=$2; shift
+      else
+        log_error "-mt|--max-tokens requires a value." >&2
+        exit 3
+      fi
+    ;;
+    -t|--temperature)
+      if [ "$2" ] && [ "${2#-}" = "$2" ]; then
+        temperature=$2; shift
+      else
+        log_error "-t|--temperature requires a value." >&2
+        exit 3
+      fi
+    ;;
+    -m|--model)
+      if [ "$2" ] && [ "${2#-}" = "$2" ]; then
+        model=$2; shift
+      else
+        log_error "-m|--model requires a value." >&2
+        exit 3
+      fi
+    ;;
+    --) shift; break ;;
+    -?*) log_error "Unknown flag: $1" >&2; exit 3 ;;
+    *) break ;;
+  esac
+  shift
+done
+
+# ╭──────────────────────
+# │ Main. Start here.
+# ╰────────
+
+if [ -n "$should_stream" ]; then
+  curl_stream_flags="--no-buffer"
+else
+  # Workaround for curl throwing an error if an argument is empty. This ensures
+  # curl_stream_flags is never empty, preventing "curl: option : blank argument
+  # where content is expected".
+  curl_stream_flags="--silent"
+fi
+
+if [ -n "$is_debug" ]; then 
+  log_info "should_stream: $should_stream"
+  log_info "should_output_raw: $should_output_raw"
+  log_info "temperature: $temperature"
+  log_info "model: $model"
+fi
+
+mutate < /dev/stdin \
+ | jq --compact-output \
+  --arg max_tokens "$max_tokens" \
+  --arg model "$model" \
+  --arg temperature "$temperature" \
+  --arg stream "$should_stream" \
+  '. as $messages | {
+    model: $model,
+    stream: ($stream | test("true")),
+    temperature: ($temperature | tonumber),
+    max_tokens: $max_tokens | tonumber,
+    messages: $messages
+  }' \
+ | curl --silent "$curl_stream_flags" \
+  --data @- \
+  --fail-with-body \
+  --request POST \
+  --header "Content-Type: application/json" \
+  --header "Authorization: Bearer $OPENAI_API_KEY" \
+  --header "OpenAI-Organization: $OPENAI_ORG_ID" \
+    https://api.openai.com/v1/chat/completions \
+  | if [ "$?" -ne 0 ]; then
+      log_error "Failed to send request to OpenAI API: $(cat)"
+      exit 4
+    elif [ -n "$should_output_raw" ]; then
+      cat
+    elif [ -n "$should_stream" ]; then
+      extract_streaming_content
+    else
+      extract_content
+    fi
