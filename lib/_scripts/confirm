@@ -17,55 +17,54 @@
 #  <message>
 #   The question to ask for confirmation
 #
-# ENVIRONMENT
-#  SH41_UTILS
-
-if [ -z "$SH41_UTILS" ]; then
-  echo "SH41_UTILS environment variable is not set" >&2
-  exit 1
-fi
-
-if ! command -v fzf >/dev/null 2>&1; then
-  echo "fzf is required to run this script" >&2
-  exit 1
-fi
+# SEE ALSO
+#  choose(1)
 
 # ╭───┤ Argument parsing
 # ╰─
 
+delimiter="\n"
 allow_cancel=""
 no_confirm=""
-options="✔ yes\n✖ no"
+options="󰔓 yes${delimiter}󰔑 no"
 
 while [ "$#" -gt 0 ]; do
   case $1 in
-    -nc|--no-confirm) no_confirm="true" ;;
-    -hc|--has-cancel) allow_cancel="true" ;;
+    -nc|--no-confirm) 
+      no_confirm="true" 
+    ;;
+    -hc|--has-cancel) 
+      allow_cancel="true" 
+      options="${options}${delimiter}󰁯 cancel"
+    ;;
+    -*) log -t error "Unknown parameter: $1" "confirm"; exit 1 ;;
     *) break ;;
   esac
   shift
 done
+
+# ╭───┤ Main
+# ╰─
 
 if [ -n "$no_confirm" ] || [ -n "$CI" ]; then
   printf "yes"
   exit 0
 fi
 
-# ╭───┤ Main
-# ╰─
+# Check if user entered a custom answer and not selected from the list
+is_custom_answer() {
+  printf "%s" "$options" | grep --quiet --invert-match "$1"
+}
 
-question="${1:-Are you sure?}"; 
+answer=$(echo "$options" | choose --allow-custom --prompt "${1:-Confirm?}")
 
-if [ -n "$allow_cancel" ]; then
-  options="$options\n󰜺 cancel"
+if [ -n "$answer" ] && ! is_custom_answer "$answer"; then
+ answer=$(printf "%s" "$answer" | awk '{ print $2 }')
 fi
 
-answer=$(echo "$options" | "$SH41_UTILS"/choose --prompt "$question")
-if [ "$?" -ne 0 ] && [ -z "$answer" ]; then
+if [ -z "$answer" ]; then
   [ -n "$allow_cancel" ] && printf "cancel" || printf "no"
   exit 1
-else
-  answer=$(echo "$answer" | tr -d '\n' | awk '{print $1}')
 fi
 
 printf "%s" "$answer"

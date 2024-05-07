@@ -10,8 +10,6 @@
 #  color yellow <text>
 #  color blue <text>
 
-print_error() { "$SH41_UTILS"/log "$@" "color" < /dev/tty; }
-
 case "$1" in
   gray) printf "\033[90m%s\033[0m" "$2"; ;;
   red) printf "\033[31m%s\033[0m" "$2"; ;;
@@ -22,5 +20,5 @@ case "$1" in
   orange) printf "\033[33m%s\033[0m" "$2"; ;;
   white) printf "\033[37m%s\033[0m" "$2"; ;;
   black) printf "\033[30m%s\033[0m" "$2"; ;;
-  *) print_error "unknown command $1"; exit 1 ;; 
+  *) echo "color: unknown command $1" >&2; exit 1 ;; 
 esac

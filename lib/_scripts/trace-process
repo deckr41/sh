@@ -1,0 +1,40 @@
+#!/usr/bin/env sh
+
+# NAME
+#  trace-process - Print the hierarchy of processes that led to the current
+#  process 
+# 
+# SYNOPSIS
+#  trace-process
+#
+# ENVIRONMENT
+#  TP_ROOT_PID
+#   Process id to stop printing at. Default is 1. This can be used by parrent
+#   processes to stop the trace at a certain point, and only print the trace
+#   relevant to itself.
+#
+#  TP_BASE_PATH
+#   Base path to trim from the process call trace. Useful for making the output
+#   more readable.
+
+current_pid="$$"
+
+if [ -z "$CI" ]; then
+  printf "\033[90m"
+fi
+
+echo "Process call trace:"
+while [ "$current_pid" -ge "${TP_ROOT_PID:-1}" ]; do 
+  read -r current_pid parent_pid args <<EOF
+$(ps -o pid=,ppid=,args= -p "$current_pid")
+EOF
+
+  # Trim out TP_BASE_PATH for easier reading
+  echo " [$current_pid]: $args" | sed "s|$TP_BASE_PATH/||"
+
+  current_pid=$parent_pid
+done
+
+if [ -z "$CI" ]; then
+  printf "\033[0m"
+fi

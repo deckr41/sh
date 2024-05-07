@@ -8,13 +8,9 @@
 #  stilize u|underline <text>
 #  stilize i|italic <text>
 
-# /dev/tty redirect is used to ensure print-message does not inherit 
-# parent's stdin
-print_error() { "$SH41_UTILS"/print-message "$@" "stylize" < /dev/tty; }
-
 case "$1" in
   b|bold) printf "\033[1m%s\033[0m" "$2"; ;;
   u|underline) printf "\033[4m%s\033[0m" "$2"; ;;
   i|italic) printf "\033[3m%s\033[0m" "$2"; ;;
-  *) print_error "unknown command $1"; exit 1 ;; 
+  *) echo "stylize: unknown command $1"; exit 1 ;; 
 esac

@@ -1,5 +1,13 @@
 #!/usr/bin/env sh
 
+# Guard against multiple/circular sourcing
+if [ -z "$IS_STDINOR_SOURCED" ]; then
+  IS_STDINOR_SOURCED=1
+else
+  echo "stdin_or function in $0 is already sourced. Skipping..." >&2
+  exit 0
+fi
+
 # NAME
 #  stdin_or - Function to read from stdin or use passed arguments as fallback
 #
@@ -26,7 +34,7 @@ stdin_or() {
   # If stdin is a terminal, return the arguments
   if [ -t 0 ]; then 
     printf "%s" "$@"
-    exit 0
+    return 0
   fi
 
   # Otherwise, read from stdin
