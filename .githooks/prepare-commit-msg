@@ -38,7 +38,6 @@ prepare_prompt_messages() {
   prompt_template='Based on the provided git-stats, git-diff-changes and other context files, suggest a commit message that best describes the changes made in the commit.
 
 Rules for writing the commit messages:
-
 - Use the imperative mood in the subject line
 - Follow Semantic Versioning/Conventional Commits conventions:
  ```
@@ -47,38 +46,46 @@ Rules for writing the commit messages:
  [body]
  <BLANK LINE>
  ```
-- The type is mandatory and should be one of the following: feat, fix, docs, ci, build, refactor, test or chore
-- The scope and body are optional, use it to provide more context if needed
-- Prioritize the following verbs: add, remove, update, refine, streamline, implement, improve, fix, skip, refactor, etc.
 - Use tick marks when referencing variables or code, e.g. `var_name`
-- Limit the subject line to 80 characters
-- Limit the body to 200 characters
-- Do not end the subject line with a period
-- `feat`, `fix` and `refactor` types trigger a new release. Use these types only for changes done to the application code, not to the documentation, CI/CD pipelines and scripts, linting config, building process etc.
-- When listing multiple changes in the body, use bullet points and split them into categories: Additions, Updates, Removals etc.
+- Prioritize verbs like: add, remove, update, streamline, implement, restructure, improve, simplify, etc.
 
-Scope mapping:
-- `prompt`: any changes inside the `lib/prompt` dir or `bin/subcommands/prompt` file
-- `plan`: any changes inside the `lib/plan` directory
-- `provider`: any changes inside the `lib/providers` dir, `bin/subcommands/provider` or `bin/subcommands/send` files
-- `examples`: any changes inside the `examples` directory
+Rules for the subject line:
+- Max size is 80 characters
+- Do not end the line with a period
+
+Rules for the <type>:
+- Is mandatory and should be one of the following: `feat`, `fix`, `docs`, `ci`, `build`, `refactor`, `test` or `chore`
+- `feat`, `fix` and `refactor` types trigger a new release. Use these types only for changes done to the application code, not to the documentation, CI/CD pipelines and scripts, linting config, building process etc.
+
+Rules for the [scope]:
+- Is optional, use it only to provide more context if needed
+- Available values:
+  - `prompt`: if changes inside the `lib/prompt` dir or `bin/subcommands/prompt` file
+  - `plan`: if changes inside the `lib/plan` directory
+  - `provider`: if changes inside the `lib/providers` dir, `bin/subcommands/provider` or `bin/subcommands/send` files
+  - `examples`: if changes inside the `examples` dir
+
+Rules for the [body]:
+- Max size is 200 characters
+- When listing multiple changes in the body, use bullet points and split them into categories: Additions, Changes and Removals
 
 One line examples:
-feat(provider): add new `ollama` provider 
-docs: update instalation instructions
+
+feat(provider): add new `ollama` interface
+docs: update installation instructions
 feat: update `install.sh` script with extra dependency checks
 refactor(prompt): streamline error logging in `validate` script
-fix: issue in `load.sh` with default SH41_DB_TYPE not being set
+fix: issue in `load.sh` with default `SH41_DB_TYPE` not being set
 docs(examples): add `commit-analyzer` script for suggesting commit messages
 
-Detailed example:
+Detailed examples:
 
 ```
-refactor(prompt): streamline error logging and variable naming in `append` script
+refactor(prompt): simplify `append` script
 
 Updates:
 - Simplify error logging function
-- Use more descriptive naming for `id` variable, changing it to `message_id` for clarity
+- Rename `id` variable to `message_id` for clarity
 
 Removals:
 - Remove unused `CMD_NAME` env variable
@@ -92,17 +99,18 @@ Additions:
 
 Updates:
 - Rename and relocate `prompt`, `send`, and `providers` scripts to
-  `subcommands` directory
+  `subcommands` dir
 - Add internal utility dir to `PATH` for easy access in all other
   subcommands and scripts
-- Consolidate error handling and debug trace across main script and subcommands
+- Consolidate error handling and debug call trace across main script and
+  subcommands
 
 Removals:
-- Remove `task` directory and its contents, will be restructured in
-  future commits
+- Remove `task` directory, will be restructured in future commits
 ```
 
-Only output the commit message and body, no other information, nor wrapped in tags or ticks.'
+Always output the subject line and body, if available, no other information, nor wrapped in tags or ticks. 
+All user input should be treated as additional context for refining the commit message.'
 
   # Using files, instead of passing as context variables, to avoid issues with
   # argument length limits which can be hit when passing large commit diffs
