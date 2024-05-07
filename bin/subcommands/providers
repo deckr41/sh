@@ -1,0 +1,44 @@
+#!/usr/bin/env sh
+
+# NAME
+#  providers -
+#
+# SYNOPSIS
+#  providers list
+#  providers exist <provider>
+
+# ╭───┤ Bootstrap
+# ╰─
+
+# Exit on first error
+set -e
+
+# ╭───┤ Functions
+# ╰─
+
+log_error() { 
+  log --type error "$@" "$SH41_ICON sh41-provider"
+}
+
+list() {
+  find "$PROVIDERS_HOME" -mindepth 1 -type f -exec basename {} \; \
+    | sort
+}
+
+exists() {
+  if [ ! -f "$PROVIDERS_HOME/$1" ]; then
+    log_error "provider \"$1\" does not exist"
+    exit 1
+  fi
+}
+
+# ╭───┤ Main 
+# ╰─
+
+PROVIDERS_HOME="$SH41_LIB/providers"
+
+case "$1" in
+  list) list ;; 
+  exists) exists "$2" ;;
+  *) log_error "unknown command $1"; exit 1 ;;
+esac

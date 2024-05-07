@@ -1,0 +1,31 @@
+#!/usr/bin/env sh
+
+# NAME
+#  sh41-tui - SH41 Text User Interface primitives 
+#
+# SYNOPSIS
+#  sh41-tui log [...]
+#  sh41-tui confirm [...]
+#  sh41-tui choose [...]
+#
+# ENVIROMENT
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+#  SH41_ICON
+#   SH41 logo icon
+
+internal_scripts_home="$SH41_LIB/_scripts"
+utility="$1"
+
+case "$utility" in
+  log|confirm|choose)
+    shift
+    "$internal_scripts_home/$utility" "$@" < /dev/stdin
+  ;;
+  *)
+    "$internal_scripts_home"/log -t error "unknown utility $utility" "$SH41_ICON sh41-tui"
+    exit 1
+  ;;
+esac
+
