@@ -1,0 +1,156 @@
+#!/usr/bin/env sh
+
+# NAME
+#  prepare-commit-msg - Git hook script to prefill message with ai suggestion
+#
+# SYNOPSIS
+#  prepare-commit-msg <commit-msg-file>
+#
+# DESCRIPTION
+#  This script is a Git hook that is run before the commit message editor is
+#  started. It pre-fills the commit message with an AI-generated suggestion,
+#  Semantic Release compatible, based on the changes made in the commit.
+#
+#  The user can try multiple times to get a suggestion that fits the changes
+#  made in the commit. Manual changes can be made before the actual commit.
+#
+# ARGUMENTS
+#  <commit-msg-file> - The file containing the default git commit message
+#
+# SEE ALSO
+#  sh41(1)
+
+# ╭──────────────────────
+# │ Functions
+# ╰────────
+
+# Build the prompt template with the general rules for writing commit messages
+# and contextual information
+#
+# SYNOPSIS
+#  prepare_prompt_messages
+#
+# RETURNS
+#  JSON array with individual message objects with contextual information
+#  and actual prompt message
+prepare_prompt_messages() {
+  # shellcheck disable=SC2016
+  prompt_template='Based on the provided git-stats, git-diff-changes and other context files, suggest a commit message that best describes the changes made in the commit.
+
+Rules for writing the commit messages:
+
+- Use the imperative mood in the subject line
+- Follow Semantic Versioning/Conventional Commits conventions:
+ ```
+ <type>([scope]): <subject>
+ <BLANK LINE>
+ [body]
+ <BLANK LINE>
+ ```
+- The type is mandatory and should be one of the following: feat, fix, docs, ci, build, refactor, test or chore
+- The scope and body are optional, use it to provide more context if needed
+- Prioritize the following verbs: add, remove, update, refine, streamline, implement, improve, fix, skip, refactor, etc.
+- Use tick marks when referencing variables or code, e.g. `var_name`
+- Limit the subject line to 80 characters
+- Limit the body to 200 characters
+- Do not end the subject line with a period
+- `feat`, `fix` and `refactor` types trigger a new release. Use these types only for changes done to the application code, not to the documentation, CI/CD pipelines and scripts, linting config, building process etc.
+- When listing multiple changes in the body, use bullet points and split them into categories: Additions, Updates, Removals etc.
+
+Scope mapping:
+- `prompt`: any changes inside the `lib/prompt` dir or `bin/subcommands/prompt` file
+- `plan`: any changes inside the `lib/plan` directory
+- `provider`: any changes inside the `lib/providers` dir, `bin/subcommands/provider` or `bin/subcommands/send` files
+- `examples`: any changes inside the `examples` directory
+
+One line examples:
+feat(provider): add new `ollama` provider 
+docs: update instalation instructions
+feat: update `install.sh` script with extra dependency checks
+refactor(prompt): streamline error logging in `validate` script
+fix: issue in `load.sh` with default SH41_DB_TYPE not being set
+docs(examples): add `commit-analyzer` script for suggesting commit messages
+
+Detailed example:
+
+```
+refactor(prompt): streamline error logging and variable naming in `append` script
+
+Updates:
+- Simplify error logging function
+- Use more descriptive naming for `id` variable, changing it to `message_id` for clarity
+
+Removals:
+- Remove unused `CMD_NAME` env variable
+```
+
+```
+refactor: restructure `bin` directory 
+
+Additions:
+- Add `sh41-tui` script for exposing own UI primitives
+
+Updates:
+- Rename and relocate `prompt`, `send`, and `providers` scripts to
+  `subcommands` directory
+- Add internal utility dir to `PATH` for easy access in all other
+  subcommands and scripts
+- Consolidate error handling and debug trace across main script and subcommands
+
+Removals:
+- Remove `task` directory and its contents, will be restructured in
+  future commits
+```
+
+Only output the commit message and body, no other information, nor wrapped in tags or ticks.'
+
+  # Using files, instead of passing as context variables, to avoid issues with
+  # argument length limits which can be hit when passing large commit diffs
+  git_stat_tmp=$(mktemp -t git-diff-stat-XXXXXX)
+  git_changes_tmp=$(mktemp -t git-diff-changes-XXXXXX)
+
+  git --no-pager diff --cached --stat > "$git_stat_tmp"
+  git --no-pager diff --cached > "$git_changes_tmp"
+
+  printf "%s" "$prompt_template" \
+    | sh41 prompt build \
+      --file "$git_stat_tmp" \
+      --file "$git_changes_tmp"
+}
+
+# ╭──────────────────────
+# │ Main. Start here.
+# ╰────────
+
+input_prompt=$(prepare_prompt_messages)
+response_tmp=$(mktemp -t prompt-response-XXXXXX)
+choice=""
+
+while true; do
+  printf "%s" "$input_prompt" \
+    | sh41 send --to openai --temperature 0.9 --max-tokens 200 \
+    | tee "$response_tmp"
+
+  output_message=$(cat "$response_tmp")
+  choice=$(sh41-tui confirm --has-cancel "󱚥 Use commit message?")
+  sh41-tui log --type info "$choice" "prepare-commit-msg"
+
+  if [ "$choice" = "yes" ] || [ "$choice" = "cancel" ]; then
+    break
+  fi
+
+  if [ "${#choice}" -gt 1 ]; then
+    input_prompt=$(printf "%s" "$input_prompt" \
+      | sh41 prompt append --role "user" --content "$choice")
+  fi
+done
+
+if [ "$choice" = "cancel" ]; then
+  exit 1
+fi
+
+# Keep default comments with commit details and prepend the AI-generated
+# message
+default_git_message=$(cat "$1")
+
+printf "%s\n%s\n" "$output_message" "$default_git_message" > "$1"
