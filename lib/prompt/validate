@@ -5,78 +5,53 @@
 #  SH41 conversation schema.
 #
 # ERROR CODES
-#  1 - JSON validation error 
+#  1 - Input error (argument, flag, option or stdin)
+#  2 - JSON validation error 
 #
 # SEE ALSO
 #  jq(1)
 
-CMD_NAME="sh41-prompt-validate"
-
-# ╭───┤ Functions
-# ╰─
-
-# Redirect stdin from /dev/tty to ensure it's treated as interactive
-# and not inherited from parent's stdin
-log_error() { "$SH41_UTILS"/log "$@" "$CMD_NAME" < /dev/tty; }
-
-# TODO: Consider using 3rd party JSON schema validation library
-validate_input_json() {
-  jq '
-    # Reusable predicates
-    def isString: type == "string";
-    def isArray: type == "array";
-    def exists: . != null;
-
-    # Error handlers
-    def typeError(field; expectedType): "Invalid type for field: " + field + ". Expected: " + expectedType;
-    def notFoundError(key): "Missing key: " + key;
-
-    if .conversation_id | exists | not then
-      notFoundError("conversation_id")
-    elif .conversation_id | isString | not then
-      typeError("conversation_id"; "string")
-    elif .messages | exists | not then
-      notFoundError("messages")
-    elif .messages | isArray | not then
-      typeError("messages"; "array")
-    else
-      empty
-    end' < /dev/stdin
-}
-
-# ╭───┤ Dependency check
-# ╰─
-
-if ! command -v "jq" >/dev/null 2>&1; then
-  log_error "jq is required to run this script"
-  exit 1
-fi
-
 # ╭───┤ Input validation 
 # ╰─
 
-if [ -t 0 ]; then
-  log_error "No input provided, expected JSON payload on stdin"
+input=$(cat)
+if [ -z "$input" ]; then
+  log --type error \
+    "No input provided, expected JSON payload via stdin" \
+    "sh41-prompt-validate"
   exit 1
 fi
 
 # ╭───┤ Main
 # ╰─
 
-input_stdin_file=$(mktemp)
-cat > "$input_stdin_file"
+jq_filter='
+  # Reusable predicates
+  def isString: type == "string";
+  def isArray: type == "array";
+  def exists: . != null;
 
-cleanup() {
-  exit_code=$?
-  rm -f "$input_stdin_file"
-  exit $exit_code
-}
-trap cleanup EXIT
+  # Error handlers
+  def typeError(field; expectedType): "Invalid type for field: " + field + ". Expected: " + expectedType;
+  def notFoundError(key): "Missing key: " + key;
 
-error_message=$(validate_input_json 2>&1 < "$input_stdin_file")
-if [ -n "$error_message" ]; then
-  log_error "$error_message"
-  exit 3
+  if .conversation_id | exists | not then
+    notFoundError("conversation_id")
+  elif .conversation_id | isString | not then
+    typeError("conversation_id"; "string")
+  elif .messages | exists | not then
+    notFoundError("messages")
+  elif .messages | isArray | not then
+    typeError("messages"; "array")
+  else
+    empty
+  end'
+error=$(jq "$jq_filter" < /dev/stdin)
+
+if [ $? -eq 0 ] && [ -z "$error" ]; then
+  printf "%s\n" "$input"
+else
+  printf "%s\n" "$error"
+  exit 2
 fi
 
-cat "$input_stdin_file"
