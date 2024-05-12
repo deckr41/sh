@@ -78,10 +78,3 @@ fi
 log_info "Sending prompt to $(underline "$TO") provider..."
 
 "$provider_path" "$@" < /dev/stdin
-
-# provider_response=$("$provider_path" "$@" 2>&1 < /dev/stdin)
-
-# if [ "$?" -ne 0 ]; then
-#   log_error "Provider $(underline "$TO") failed with error: $provider_response"
-#   exit 4
-# fi
