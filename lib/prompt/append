@@ -32,7 +32,11 @@
 # ╰─
 
 log_error() { 
-  log --type error "$@" "sh41-prompt-append"
+  log --type error "$@" "$SH41_ICON sh41-prompt-append"
+}
+
+log_info() {
+  log --type info "$@" "$SH41_ICON sh41-prompt-append"
 }
 
 # ╭───┤ Argument parsing
@@ -40,6 +44,9 @@ log_error() {
 
 while [ "$#" -gt 0 ]; do
   case $1 in
+    --debug)
+      DEBUG="true"
+    ;;
     -r|--role)
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
         ROLE="$2"; shift
@@ -83,7 +90,7 @@ if { [ -n "$ROLE" ] || [ -n "$CONTENT" ]; } && [ -n "$FILE_PATH" ]; then
 fi
 
 if { [ -n "$ROLE" ] && [ -z "$CONTENT" ]; } || { [ -z "$ROLE" ] && [ -n "$CONTENT" ]; }; then
-  log_error "Both -r|--role and -c|--content argumest are required"
+  log_error "Both -r|--role and -c|--content argument are required"
   exit 1
 fi
 
@@ -96,21 +103,34 @@ fi
 # ╰─
 
 message_id=$(uuidgen)
+message_tmp=$(mktemp -t sh41_prompt-append-XXXXX)
 
-cat \
-  | if [ "$FILE_PATH" ]; then
-      jq --arg id "$message_id" --arg path "$FILE_PATH" --rawfile content "$FILE_PATH" \
-        '.messages += [{
-           id: $id,
-           role: "file",
-           content: $content,
-           path: $path
-         }]'
-    else
-      jq --arg id "$message_id" --arg role "$ROLE" --arg content "$CONTENT" \
-        '.messages += [{
-           id: $id,
-           role: $role,
-           content: $content
-         }]'
-    fi
+if [ "$FILE_PATH" ]; then
+  jq --null-input \
+    --arg id "$message_id" \
+    --arg path "$FILE_PATH" \
+    --rawfile content "$FILE_PATH" '{
+    id: $id,
+    role: "file",
+    content: $content,
+    path: $path
+  }' > "$message_tmp"
+else
+  jq --null-input \
+    --arg id "$message_id" \
+    --arg role "$ROLE" \
+    --arg content "$CONTENT" '{
+    id: $id,
+    role: $role,
+    content: $content
+  }' > "$message_tmp"
+fi
+
+if [ -n "$DEBUG" ]; then
+  log_info "Appending message to conversation"
+fi
+
+cat | jq \
+  --slurpfile message "$message_tmp" \
+  '.messages += $message'
+
