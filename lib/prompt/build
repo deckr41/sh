@@ -78,22 +78,27 @@ log_error() {
 interpolate_prompt() {
   # Escape the key for use in an awk regex, handling keys that may contain
   # special characters.
-  escaped_key=$(printf '%s' "$1" | sed "s/[.[\*^$()]/\\&/g")
+  key="$1"
   value="$2"
 
   # Check for the presence of the key in the template.
-  if ! printf '%s' "$INPUT_PROMPT" | grep -Eq "\{\{\s*$escaped_key\s*\}\}"; then
+  if ! printf '%s' "$INPUT_PROMPT" | grep -Eq "\{\{\s*$key\s*\}\}"; then
     exit 3
   fi
 
   # Perform the replacement.
-  INPUT_PROMPT=$(
-    printf '%s' "$INPUT_PROMPT" \
-      | awk -v key="$escaped_key" -v val="$value" '{
-          gsub(/\{\{\s*'"$escaped_key"'\s*\}\}/, val);
-          print
-        }'
-  )
+  INPUT_PROMPT=$(printf '%s' "$INPUT_PROMPT" \
+    | awk -v key="$key" -v val="$value" '{
+        gsub(/\{\{\s*'"$key"'\s*\}\}/, val);
+        print
+      }')
+}
+
+# Check if the given key string is valid.
+# Must start with a letter, contain only alphanumeric characters, 
+# underscores or hyphens.
+is_valid_key() {
+  printf '%s' "$1" | grep -Eq "^[a-zA-Z][a-zA-Z0-9_-]*$"
 }
 
 # ╭───┤ Input validation 
@@ -123,7 +128,7 @@ while [ "$#" -gt 0 ]; do
       fi
 
       OUTPUT_CONVERSATION=$(printf '%s' "$OUTPUT_CONVERSATION" \
-        | "$SH41_LIB"/prompt/append --file "$file_path")
+        | "$SH41_LIB"/prompt/append --debug --file "$file_path")
     ;;
     -v|--var)
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
@@ -133,12 +138,17 @@ while [ "$#" -gt 0 ]; do
         exit 1
       fi
 
+      if ! is_valid_key "$key"; then
+        log_error "Invalid key name \"$key\". Keys must be alphanumeric, start with a letter and contain only underscores and hyphens"
+        exit 1
+      fi
+
       if [ "${2#-}" = "$2" ]; then
         value="$2"; shift
       fi
 
       interpolate_prompt "$key" "$value"
-      
+
       # Key not found in prompt, adding data as separate message
       if [ $? -eq 3 ]; then
         OUTPUT_CONVERSATION=$(printf '%s' "$OUTPUT_CONVERSATION" \
