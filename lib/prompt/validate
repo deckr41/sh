@@ -5,53 +5,50 @@
 #  SH41 conversation schema.
 #
 # ERROR CODES
-#  1 - Input error (argument, flag, option or stdin)
-#  2 - JSON validation error 
+#  1: Invalid input - parsing error of stdin, argument or flag parsing
+#  2: Invalid JSON payload - validation error of the JSON payload against
+#  the SH41 schema
 #
 # SEE ALSO
 #  jq(1)
 
-# ╭───┤ Input validation 
+# ╭───┤ Functions 
 # ╰─
 
-input=$(cat)
-if [ -z "$input" ]; then
-  log --type error \
-    "No input provided, expected JSON payload via stdin" \
-    "sh41-prompt-validate"
-  exit 1
-fi
+log_error() {
+  log --type error "$1" "$SH41_ICON sh41-prompt-validate"
+}
 
 # ╭───┤ Main
 # ╰─
 
-jq_filter='
-  # Reusable predicates
-  def isString: type == "string";
-  def isArray: type == "array";
-  def exists: . != null;
+stdin_input=$(cat)
+if [ -z "$stdin_input" ]; then
+  log_error "No input provided, expected JSON payload via stdin"
+  exit 1
+fi
 
-  # Error handlers
+jq_validation='
   def typeError(field; expectedType): "Invalid type for field: " + field + ". Expected: " + expectedType;
-  def notFoundError(key): "Missing key: " + key;
+  def notFoundError(key): "Missing field: " + key;
+  def notExistsOrEmpty(field): if .[field] == null or .[field] == "" then true else false end;
 
-  if .conversation_id | exists | not then
+  if notExistsOrEmpty("conversation_id") then
     notFoundError("conversation_id")
-  elif .conversation_id | isString | not then
+  elif (.conversation_id | type) != "string" then
     typeError("conversation_id"; "string")
-  elif .messages | exists | not then
+  elif notExistsOrEmpty("messages") then
     notFoundError("messages")
-  elif .messages | isArray | not then
+  elif (.messages | type) != "array" then
     typeError("messages"; "array")
   else
     empty
   end'
-error=$(jq "$jq_filter" < /dev/stdin)
 
-if [ $? -eq 0 ] && [ -z "$error" ]; then
-  printf "%s\n" "$input"
-else
-  printf "%s\n" "$error"
+error=$(printf "%s" "$stdin_input" \
+  | jq --raw-output "$jq_validation")
+
+if [ -n "$error" ]; then
+  log_error "$error"
   exit 2
 fi
-
