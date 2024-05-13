@@ -4,7 +4,7 @@
 #  sh41 - An agentic framework for solving problems together with Large Language Models.
 #
 # SYNOPSIS
-#  sh41 prompt [...] 
+#  sh41 conversations [...] 
 #  sh41 providers [...]
 #  sh41 send [...]
 #
@@ -50,15 +50,15 @@ subcommands_home="$SH41_BIN/subcommands"
 subcommand="$1"; shift
 
 case $subcommand in
-  prompt)
-    "$subcommands_home"/prompt "$@" < /dev/stdin
+  conversations)
+    "$subcommands_home"/conversations "$@" < /dev/stdin
    ;;
   providers)
     "$subcommands_home"/providers "$@" < /dev/stdin
   ;;
   send)
     stdin_input=$(cat)
-    printf "%s" "$stdin_input" | "$subcommands_home"/prompt validate
+    printf "%s" "$stdin_input" | "$subcommands_home"/conversations validate
     printf "%s" "$stdin_input" | "$subcommands_home"/send "$@"
   ;;
   *) 

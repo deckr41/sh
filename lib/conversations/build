@@ -1,14 +1,11 @@
 #!/usr/bin/env sh
 
-# NAME
-#  sh41-prompt-build - Build a provider agnostic JSON conversation structure.
-#
 # SYNOPSIS
-#  sh41-prompt-build [-f|--file <file_path>] [-v|--var <name> <value>]
+#  build [-f|--file <file_path>] [-v|--var <name> <value>]
 #
 # DESCRIPTION
 #  Internal subcommand for building a JSON conversation structure based on a
-#  given prompt. 
+#  initial prompt. 
 #
 #  The prompt can contain template keys, {{ key }}, that are replaced with
 #  values passed as additional context.
@@ -62,14 +59,14 @@
 . "$SH41_LIB/_fn/trap-debug"
 
 # log config
-export LOG_NAMESPACE="$SH41_ICON sh41-prompt-build"
+export LOG_NAMESPACE="$SH41_ICON conversations-build"
 
 # ╭───┤ Global variables
 # ╰─
 
-INPUT_PROMPT=$(cat)
-OUTPUT_CONVERSATION="{
-  \"conversation_id\": \"$(uuidgen)\",
+PROMPT=$(cat)
+CONVERSATION="{
+  \"id\": \"$(uuidgen)\",
   \"messages\": []
 }"
 
@@ -87,12 +84,12 @@ interpolate_prompt() {
   value="$2"
 
   # Check for the presence of the key in the template.
-  if ! printf '%s' "$INPUT_PROMPT" | grep -Eq "\{\{\s*$key\s*\}\}"; then
+  if ! printf '%s' "$PROMPT" | grep -Eq "\{\{\s*$key\s*\}\}"; then
     exit 3
   fi
 
   # Perform the replacement.
-  INPUT_PROMPT=$(printf '%s' "$INPUT_PROMPT" \
+  PROMPT=$(printf '%s' "$PROMPT" \
     | awk -v key="$key" -v val="$value" '{
         gsub(/\{\{\s*'"$key"'\s*\}\}/, val);
         print
@@ -109,7 +106,7 @@ is_valid_key() {
 # ╭───┤ Input validation 
 # ╰─
 
-if [ -z "$INPUT_PROMPT" ]; then
+if [ -z "$PROMPT" ]; then
   log error "No prompt provided, expected via stdin"
   exit 1
 fi
@@ -132,8 +129,8 @@ while [ "$#" -gt 0 ]; do
         exit 2
       fi
 
-      OUTPUT_CONVERSATION=$(printf '%s' "$OUTPUT_CONVERSATION" \
-        | "$SH41_LIB"/prompt/append --debug --file "$file_path")
+      CONVERSATION=$(printf '%s' "$CONVERSATION" \
+        | "$SH41_LIB"/conversations/append --debug --file "$file_path")
     ;;
     -v|--var)
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
@@ -156,8 +153,8 @@ while [ "$#" -gt 0 ]; do
 
       # Key not found in prompt, adding data as separate message
       if [ $? -eq 3 ]; then
-        OUTPUT_CONVERSATION=$(printf '%s' "$OUTPUT_CONVERSATION" \
-          | "$SH41_LIB"/prompt/append --role "context" --content "$key: $value")
+        CONVERSATION=$(printf '%s' "$CONVERSATION" \
+          | "$SH41_LIB"/conversations/append --role "context" --content "$key: $value")
       fi
     ;;
     --) shift; break ;;
@@ -170,6 +167,6 @@ done
 # ╭───┤ Main
 # ╰─
 
-printf '%s' "$OUTPUT_CONVERSATION" \
-  | "$SH41_LIB"/prompt/append --role "user" --content "$INPUT_PROMPT"
+printf '%s' "$CONVERSATION" \
+  | "$SH41_LIB"/conversations/append --role "user" --content "$PROMPT"
 

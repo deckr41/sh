@@ -1,12 +1,8 @@
 #!/usr/bin/env sh
 
-# DESCRIPTION
-#  Subcommand for adding a new message object to an existing conversation's
-#  message array.
-#
 # SYNOPSIS
-#  sh41-prompt append -r|--role <value> -c|--content <value>
-#                     -f|--file <value>
+#  append -r|--role <value> -c|--content <value>
+#         -f|--file <value>
 #
 # OPTIONS
 #  -r|--role <value>
@@ -35,7 +31,7 @@
 . "$SH41_LIB/_fn/trap-debug"
 
 # log config
-export LOG_NAMESPACE="$SH41_ICON sh41-prompt-append"
+export LOG_NAMESPACE="$SH41_ICON conversations-append"
 
 # ╭───┤ Argument parsing
 # ╰─

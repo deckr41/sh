@@ -6,8 +6,7 @@
 #
 # ERROR CODES
 #  1: Invalid input - parsing error of stdin, argument or flag parsing
-#  2: Invalid JSON payload - validation error of the JSON payload against
-#  the SH41 schema
+#  2: Invalid JSON payload - validation error in stdin JSON data
 #
 # SEE ALSO
 #  jq(1)
@@ -19,7 +18,7 @@
 . "$SH41_LIB/_fn/trap-debug"
 
 # log config
-export LOG_NAMESPACE="$SH41_ICON sh41-prompt-validate"
+export LOG_NAMESPACE="$SH41_ICON conversations-validate"
 
 # ╭───┤ Main
 # ╰─
@@ -35,10 +34,10 @@ jq_validation='
   def notFoundError(key): "Missing field: " + key;
   def notExistsOrEmpty(field): if .[field] == null or .[field] == "" then true else false end;
 
-  if notExistsOrEmpty("conversation_id") then
-    notFoundError("conversation_id")
-  elif (.conversation_id | type) != "string" then
-    typeError("conversation_id"; "string")
+  if notExistsOrEmpty("id") then
+    notFoundError("id")
+  elif (.id | type) != "string" then
+    typeError("id"; "string")
   elif notExistsOrEmpty("messages") then
     notFoundError("messages")
   elif (.messages | type) != "array" then
