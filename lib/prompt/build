@@ -55,6 +55,12 @@
 # SEE ALSO
 #  jq(1)
 
+# ╭───┤ Traps & Signals
+# ╰─
+
+# shellcheck source=../_fn/trap-debug
+. "$SH41_LIB/_fn/trap-debug"
+
 # ╭───┤ Global variables
 # ╰─
 

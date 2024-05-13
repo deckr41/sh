@@ -1,9 +1,12 @@
 #!/usr/bin/env sh
 
 # NAME
-#  sh41 -
+#  sh41 - An agentic framework for solving problems together with Large Language Models.
 #
 # SYNOPSIS
+#  sh41 prompt [...] 
+#  sh41 providers [...]
+#  sh41 send [...]
 #
 # ENVIROMENT
 #  SH41_BIN
@@ -14,67 +17,52 @@
 #
 #  SH41_ICON
 #   SH41 logo icon
-
-# ╭───┤ Dependencies
-# ╰─
-
-if ! command -v "jq" >/dev/null 2>&1; then
-  echo "sh41: jq is required to run this script" >&2
-  exit 1
-fi
+#
+# ERRORS
+#  1: Missing OS dependency
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
 
 # ╭───┤ Bootstrap
 # ╰─
 
-# Exit on first error
 set -e
+
+# trap-debug config
+export TD_ROOT_PID="$PPID"
+export TD_BASE_PATH="$SH41_HOME"
 
 # Expose all internal utility scripts for the duration of the process
 export PATH="$SH41_LIB/_scripts:$PATH"
 
-# ╭───┤ Traps & Signals
-# ╰─
-
-# trace-process goes up the call stack until TP_ROOT_PID is reached
-export TP_ROOT_PID="$PPID"
-# trace-process removes TP_BASE_PATH when logging
-export TP_BASE_PATH="$SH41_HOME"
-
-debug() {
-  exit_code=$?; 
-
-  if [ $exit_code -ne 0 ]; then
-    trace-process >&2
-    exit $exit_code
-  fi
+log_error() { 
+  log --type error "$1" "$SH41_ICON sh41"
 }
 
-trap debug EXIT
+if ! command -v "jq" >/dev/null 2>&1; then
+  log_error "jq is required to run this script"
+  exit 1
+fi
 
 # ╭───┤ Main
 # ╰─
 
 subcommands_home="$SH41_BIN/subcommands"
+subcommand="$1"; shift
 
-case $1 in
+case $subcommand in
   prompt)
-    shift
     "$subcommands_home"/prompt "$@" < /dev/stdin
-     ;;
+   ;;
   providers)
-    shift
     "$subcommands_home"/providers "$@" < /dev/stdin
   ;;
   send)
-    shift
-    "$subcommands_home"/prompt validate < /dev/stdin \
-      | if [ $? -eq 0 ]; then 
-          "$subcommands_home"/send "$@"
-        fi
-    exit
+    stdin_input=$(cat)
+    printf "%s" "$stdin_input" | "$subcommands_home"/prompt validate
+    printf "%s" "$stdin_input" | "$subcommands_home"/send "$@"
   ;;
   *) 
-    log -t error "unknown argument $1" "$SH41_ICON sh41"
-    exit 1 
+    log_error "Unknown argument $subcommand"
+    exit 2
   ;;
 esac

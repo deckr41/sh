@@ -1,0 +1,65 @@
+#!/usr/bin/env sh
+
+# Guard against multiple/circular sourcing
+if [ -z "$IS_TRAP_DEBUG_SOURCED" ]; then
+  IS_TRAP_DEBUG_SOURCED=1
+else
+  echo "$0 is already sourced. Skipping..." >&2
+  return 0
+fi
+
+# Print the hierarchy chain of processes that led to the current process 
+#
+# SYNOPSIS
+#  trace-process <trapped_exit_code>
+#
+# ENVIRONMENT
+#  TD_ROOT_PID=1
+#   Stop walking up the process tree at this PID. Used by parrent process to
+#   control and limit only the relevant trace slice. If not set, the stack will
+#   be traced all the way to the root process.
+#
+#  TD_BASE_PATH
+#   Trim the path from the process call trace. Useful for making the output
+#   more readable.
+#
+#  CI
+#   Most CI/CD environments have a CI environment variable set when running
+#   in a CI/CD pipeline. Use this as a flag to disable color output.
+#
+trap_trace() {
+  # Originaly, this is the PID where the error occured
+  current_pid=$$
+
+  if [ -z "$CI" ]; then
+    printf "\033[90m"
+  fi
+
+  echo "Process call trace ($1):"
+  while [ "$current_pid" -ge "${TD_ROOT_PID:-1}" ]; do 
+    # Details about the process
+    read -r current_pid parent_pid args <<EOF
+$(ps -o pid=,ppid=,args= -p "$current_pid")
+EOF
+
+    # Trim out TD_BASE_PATH for easier reading
+    echo " [$current_pid]: $args" | sed "s|$TD_BASE_PATH/||"
+
+    current_pid=$parent_pid
+  done
+
+  if [ -z "$CI" ]; then
+    printf "\033[0m"
+  fi
+}
+
+trap_debug() {
+  exit_code=$?; 
+
+  if [ $exit_code -ne 0 ]; then
+    trap_trace "$exit_code" >&2
+  fi
+}
+
+trap trap_debug EXIT
+

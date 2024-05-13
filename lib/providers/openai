@@ -67,6 +67,12 @@ if ! command -v "curl" >/dev/null 2>&1; then
   exit 2
 fi
 
+# ╭───┤ Traps & Signals
+# ╰─
+
+# shellcheck source=../_fn/trap-debug
+. "$SH41_LIB/_fn/trap-debug"
+
 # ╭───┤ Functions
 # ╰─
 
