@@ -49,42 +49,35 @@
 # SEE ALSO
 #  curl(1), jq(1)
 
-# ╭───┤ Dependency check
-# ╰─ 
-
-if [ -z "$OPENAI_API_KEY" ]; then
-  log_error "missing required environment variable OPENAI_API_KEY"
-  exit 1
-fi
-
-if ! command -v "jq" >/dev/null 2>&1; then
-  log_error "jq is required to run this script"
-  exit 2
-fi
-
-if ! command -v "curl" >/dev/null 2>&1; then
-  log_error "curl is required to run this script"
-  exit 2
-fi
-
-# ╭───┤ Traps & Signals
+# ╭───┤ Bootstrap
 # ╰─
 
 # shellcheck source=../_fn/trap-debug
 . "$SH41_LIB/_fn/trap-debug"
 
+# log config
+export LOG_NAMESPACE="$SH41_ICON sh41-prompt-validate"
+
+# ╭───┤ Dependency check
+# ╰─ 
+
+if [ -z "$OPENAI_API_KEY" ]; then
+  log error "missing required environment variable OPENAI_API_KEY"
+  exit 1
+fi
+
+if ! command -v "jq" >/dev/null 2>&1; then
+  log error "jq is required to run this script"
+  exit 2
+fi
+
+if ! command -v "curl" >/dev/null 2>&1; then
+  log error "curl is required to run this script"
+  exit 2
+fi
+
 # ╭───┤ Functions
 # ╰─
-
-CMD_NAME="$SH41_ICON sh41-provider-openai"
-
-log_error() { 
-  log --type error "$@" "$CMD_NAME"
-}
-
-log_info() { 
-  log --type info "$@" "$CMD_NAME"
-}
 
 # Extract the content from the streamed response chunks.
 # - When streaming, OpenAI sends multiple JSON objects with the content of the
@@ -173,7 +166,7 @@ while [ "$#" -gt 0 ]; do
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
         max_tokens=$2; shift
       else
-        log_error "-mt|--max-tokens requires a value." >&2
+        log error "-mt|--max-tokens requires a value." >&2
         exit 3
       fi
     ;;
@@ -181,7 +174,7 @@ while [ "$#" -gt 0 ]; do
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
         temperature=$2; shift
       else
-        log_error "-t|--temperature requires a value." >&2
+        log error "-t|--temperature requires a value." >&2
         exit 3
       fi
     ;;
@@ -189,12 +182,12 @@ while [ "$#" -gt 0 ]; do
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
         model=$2; shift
       else
-        log_error "-m|--model requires a value." >&2
+        log error "-m|--model requires a value." >&2
         exit 3
       fi
     ;;
     --) shift; break ;;
-    -?*) log_error "Unknown flag: $1" >&2; exit 153 ;;
+    -?*) log error "Unknown flag: $1" >&2; exit 153 ;;
     *) break ;;
   esac
   shift
@@ -213,10 +206,10 @@ else
 fi
 
 if [ -n "$is_debug" ]; then 
-  log_info "should_stream: $should_stream"
-  log_info "should_output_raw: $should_output_raw"
-  log_info "temperature: $temperature"
-  log_info "model: $model"
+  log info "should_stream: $should_stream"
+  log info "should_output_raw: $should_output_raw"
+  log info "temperature: $temperature"
+  log info "model: $model"
 fi
 
 curl_stderr_tmp=$(mktemp -t sh41_openai-send_stderr-XXXXXX)
@@ -257,6 +250,6 @@ mutate < /dev/stdin \
     fi
 
 if [ "$(cat "$curl_exit_code_tmp")" -ne 0 ]; then
-  log_error "$(cat "$curl_stderr_tmp")"
+  log error "$(cat "$curl_stderr_tmp")"
   exit 4
 fi

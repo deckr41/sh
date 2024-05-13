@@ -27,12 +27,8 @@
 # Exit on first error
 set -e
 
-# ╭───┤ Functions
-# ╰─
-
-log_error() { 
-  log -t error "$@" "$SH41_ICON sh41-prompt"
-}
+# log config
+export LOG_NAMESPACE="$SH41_ICON sh41-prompt"
 
 # ╭───┤ Main 
 # ╰─
@@ -52,5 +48,5 @@ case $1 in
     shift
     "$prompt_home"/validate "$@" < /dev/stdin
   ;;
-  *) log_error "unknown argument $1"; exit 1 ;;
+  *) log error "Unknown argument $1"; exit 1 ;;
 esac

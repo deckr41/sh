@@ -12,25 +12,21 @@
 # SEE ALSO
 #  jq(1)
 
-# ╭───┤ Traps & Signals
+# ╭───┤ Bootstrap 
 # ╰─
 
 # shellcheck source=../_fn/trap-debug
 . "$SH41_LIB/_fn/trap-debug"
 
-# ╭───┤ Functions 
-# ╰─
-
-log_error() {
-  log --type error "$1" "$SH41_ICON sh41-prompt-validate"
-}
+# log config
+export LOG_NAMESPACE="$SH41_ICON sh41-prompt-validate"
 
 # ╭───┤ Main
 # ╰─
 
 stdin_input=$(cat)
 if [ -z "$stdin_input" ]; then
-  log_error "No input provided, expected JSON payload via stdin"
+  log error "No input provided, expected JSON payload via stdin"
   exit 1
 fi
 
@@ -55,6 +51,6 @@ error=$(printf "%s" "$stdin_input" \
   | jq --raw-output "$jq_validation")
 
 if [ -n "$error" ]; then
-  log_error "$error"
+  log error "$error"
   exit 2
 fi

@@ -13,12 +13,11 @@
 # Exit on first error
 set -e
 
+# log config
+export LOG_NAMESPACE="$SH41_ICON sh41-provider"
+
 # ╭───┤ Functions
 # ╰─
-
-log_error() { 
-  log --type error "$@" "$SH41_ICON sh41-provider"
-}
 
 list() {
   find "$PROVIDERS_HOME" -mindepth 1 -type f -exec basename {} \; \
@@ -27,7 +26,7 @@ list() {
 
 exists() {
   if [ ! -f "$PROVIDERS_HOME/$1" ]; then
-    log_error "provider \"$1\" does not exist"
+    log error "provider \"$1\" does not exist"
     exit 1
   fi
 }
@@ -40,5 +39,5 @@ PROVIDERS_HOME="$SH41_LIB/providers"
 case "$1" in
   list) list ;; 
   exists) exists "$2" ;;
-  *) log_error "unknown command $1"; exit 1 ;;
+  *) log error "Unknown command $1"; exit 1 ;;
 esac

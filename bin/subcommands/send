@@ -23,16 +23,11 @@
 # Exit on first error
 set -e
 
+# log config
+export LOG_NAMESPACE="$SH41_ICON sh41-provider"
+
 # ╭───┤ Functions
 # ╰─
-
-log_error() { 
-  log --type error "$@" "$SH41_ICON sh41-send"
-}
-
-log_info() { 
-  log --type info "$@" "$SH41_ICON sh41-send"
-}
 
 underline() { 
   stylize underline "$@"
@@ -47,7 +42,7 @@ while [ "$#" -gt 0 ]; do
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
         TO="$2"; shift
       else
-        log_error "-t|--to flag requires a value"
+        log error "-t|--to flag requires a value"
         exit 1
       fi
       shift
@@ -60,7 +55,7 @@ done
 # ╰─
 
 if [ -z "$TO" ]; then
-  log_error "Missing required flag -t|--to. Must be first, before other provider specific arguments."
+  log error "Missing required flag -t|--to. Must be first, before other provider specific arguments."
   exit 2
 fi
 
@@ -68,13 +63,13 @@ providers_home="$SH41_LIB/providers"
 provider_path="${providers_home}/${TO}"
 
 if [ ! -f "$provider_path" ]; then
-  log_error "Provider $(underline "$TO") does not exist. To add a new provider, create a $(underline "$TO") shell file inside providers home: $providers_home"
+  log error "Provider $(underline "$TO") does not exist. To add a new provider, create a $(underline "$TO") shell file inside providers home: $providers_home"
   exit 3
 fi
 
 # ╭───┤ Main
 # ╰─
 
-log_info "Sending prompt to $(underline "$TO") provider..."
+log info "Sending prompt to $(underline "$TO") provider..."
 
 "$provider_path" "$@" < /dev/stdin

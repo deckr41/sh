@@ -4,85 +4,78 @@
 #  log - Print a fancy log message
 #
 # SYNOPSIS
-#  log [-t|--type <value>] [--no-color] <message> [namespace]
-#
-# DESCRIPTION
-#  Print a fancy styled log message to the terminal.
-#
-#  If the $CI environment variable is set, the message is printed without
-#  colors.
-#
-# OPTIONS
-#  [-t|--type <value>]
-#   The type of message to print. Possible values are "error", "warning",
-#   "info", and "success". Default is "error".
+#  log <type> [-nc|--no-color] <message>
 #
 # FLAGS
 #  [-ns|--no-color]
 #   Do not print colors or icons.
 #
 # ARGUMENTS
+#  <type=error>
+#   The type of message to print. Possible values are "error", "warning",
+#   "info", and "success". Default is "error".
+#
 #  <message>
 #   The message to print. Can be passed as the first argument or as 
 #   standard input.
-#  
-#  [namespace]
-#   The namespace of the message
 #
 # ENVIRONMENT
+#  LOG_NAMESPACE
+#   If set, the namespace is printed before the message.
+#
 #  CI
 #   If exists, the message is printed without colors.
 
-# SYNOPSIS
-#  _log_plain <message> [namespace]
-log_plain() {
-  type_label=$(printf "%s" "$TYPE" | tr "[:lower:]" "[:upper:]")
+# ╭───┤ Functions
+# ╰─
 
-  echo "$(date +%T) $type_label ${NAMESPACE}${MESSAGE}"
+set_theme() {
+  TYPE_LABEL="ERR"
+  TYPE_COLOR="red"
+
+  case $1 in
+    err|error) TYPE_LABEL="ERR"; TYPE_COLOR="red" ;;
+    warn|warning) TYPE_LABEL="WRN"; TYPE_COLOR="yellow" ;;
+    info) TYPE_LABEL="INF"; TYPE_COLOR="blue" ;;
+    success) TYPE_LABEL="SUC"; TYPE_COLOR="green" ;;
+  esac
 }
 
-# SYNOPSIS
-#  _log_with_style <message> [namespace]
+log_plain() {
+  echo "$(date +%T) $TYPE_LABEL ${LOG_NAMESPACE:+$LOG_NAMESPACE: }$1"
+}
+
 log_with_style() {
-  type_label=$(printf "%s" "$TYPE" | tr "[:lower:]" "[:upper:]")
+  styled_type_label=$(color "$TYPE_COLOR" "$(stylize bold "$TYPE_LABEL")")
 
-  case $TYPE in
-    error) type_label=$(color red "$type_label") ;;
-    warning) type_label=$(color yellow "$type_label") ;;
-    info) type_label=$(color blue "$type_label") ;;
-    success) type_label=$(color green "$type_label") ;;
-  esac
-
-  if [ -n "$NAMESPACE" ]; then
-    NAMESPACE=$(color gray "$NAMESPACE")
+  if [ -n "$LOG_NAMESPACE" ]; then
+    styled_namespace=$(color gray "$LOG_NAMESPACE: ")
   fi
 
-  echo "$(date +%T) $(stylize bold "$type_label") ${NAMESPACE}${MESSAGE}"
+  echo "$(date +%T) $styled_type_label $styled_namespace$1"
 }
 
 # ╭───┤ Argument parsing
 # ╰─
 
-TYPE="error"
-HAS_COLOR="true"
+message_type=${1:-error}; shift
+has_color=$([ -n "$CI" ] && echo "" || echo "true")
 
 while [ "$#" -gt 0 ]; do
   case $1 in
-    -t|--type) TYPE=$2; shift ;;
-    -nc|--no-color) HAS_COLOR="" ;;
+    -nc|--no-color) has_color=""; shift ;;
     *) break ;;
   esac
-  shift
 done
 
 # ╭───┤ Main
 # ╰─
 
-MESSAGE=$1
-NAMESPACE=${2:+$2: }
+set_theme "$message_type"
 
-if [ -n "$CI" ] || [ -z "$HAS_COLOR" ]; then
-  log_plain "$1" "$2" >&2
+if [ -z "$has_color" ]; then
+  log_plain "$1" >&2
 else
-  log_with_style "$1" "$2" >&2
+  log_with_style "$1" >&2
 fi
+

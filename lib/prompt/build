@@ -55,11 +55,14 @@
 # SEE ALSO
 #  jq(1)
 
-# ╭───┤ Traps & Signals
+# ╭───┤ Bootstrap
 # ╰─
 
 # shellcheck source=../_fn/trap-debug
 . "$SH41_LIB/_fn/trap-debug"
+
+# log config
+export LOG_NAMESPACE="$SH41_ICON sh41-prompt-build"
 
 # ╭───┤ Global variables
 # ╰─
@@ -72,10 +75,6 @@ OUTPUT_CONVERSATION="{
 
 # ╭───┤ Functions
 # ╰─
-
-log_error() {
-  log --type error "$@" "sh41-prompt-build"
-}
 
 # Interpolate the given key with a value in the global $INPUT_PROMPT.
 #
@@ -111,7 +110,7 @@ is_valid_key() {
 # ╰─
 
 if [ -z "$INPUT_PROMPT" ]; then
-  log_error "No prompt provided, expected via stdin"
+  log error "No prompt provided, expected via stdin"
   exit 1
 fi
 
@@ -124,12 +123,12 @@ while [ "$#" -gt 0 ]; do
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
         file_path="$2"; shift
       else
-        log_error "-f|--file flag requires a value"
+        log error "-f|--file flag requires a value"
         exit 1
       fi
 
       if [ ! -f "$file_path" ]; then
-        log_error "-f|--file $file_path not found"
+        log error "-f|--file $file_path not found"
         exit 2
       fi
 
@@ -140,12 +139,12 @@ while [ "$#" -gt 0 ]; do
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
         key=$2; shift
       else
-        log_error "--var flag requires a key"
+        log error "--var flag requires a key"
         exit 1
       fi
 
       if ! is_valid_key "$key"; then
-        log_error "Invalid key name \"$key\". Keys must be alphanumeric, start with a letter and contain only underscores and hyphens"
+        log error "Invalid key name \"$key\". Keys must be alphanumeric, start with a letter and contain only underscores and hyphens"
         exit 1
       fi
 
@@ -162,7 +161,7 @@ while [ "$#" -gt 0 ]; do
       fi
     ;;
     --) shift; break ;;
-    -?*) log_error "unknown flag $1"; exit 1 ;;
+    -?*) log error "unknown flag $1"; exit 1 ;;
     *) break ;;
   esac
   shift

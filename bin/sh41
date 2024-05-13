@@ -25,7 +25,11 @@
 # ╭───┤ Bootstrap
 # ╰─
 
+# Exit on first error
 set -e
+
+# log config
+export LOG_NAMESPACE="$SH41_ICON sh41"
 
 # trap-debug config
 export TD_ROOT_PID="$PPID"
@@ -34,12 +38,8 @@ export TD_BASE_PATH="$SH41_HOME"
 # Expose all internal utility scripts for the duration of the process
 export PATH="$SH41_LIB/_scripts:$PATH"
 
-log_error() { 
-  log --type error "$1" "$SH41_ICON sh41"
-}
-
 if ! command -v "jq" >/dev/null 2>&1; then
-  log_error "jq is required to run this script"
+  log error "jq is required to run this script"
   exit 1
 fi
 
@@ -62,7 +62,7 @@ case $subcommand in
     printf "%s" "$stdin_input" | "$subcommands_home"/send "$@"
   ;;
   *) 
-    log_error "Unknown argument $subcommand"
+    log error "Unknown argument $subcommand"
     exit 2
   ;;
 esac

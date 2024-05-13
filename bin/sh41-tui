@@ -11,23 +11,16 @@
 # ENVIROMENT
 #  SH41_LIB
 #   Path to SH41 internal lib directory.
-#
-#  SH41_ICON
-#   SH41 logo icon
 
 internal_scripts_home="$SH41_LIB/_scripts"
 utility="$1"; shift
-
-log_error() {
-  "$internal_scripts_home"/log --type error "$@"
-}
 
 case "$utility" in
   log|confirm|choose)
     "$internal_scripts_home/$utility" "$@" < /dev/stdin
   ;;
   *)
-    log_error "Unknown utility $utility"
+    echo "sh41-tui: Unknown utility $utility" >&2
     exit 1
   ;;
 esac

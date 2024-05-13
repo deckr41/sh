@@ -32,7 +32,7 @@ while [ "$#" -gt 0 ]; do
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
         FILES="$FILES $2"; shift
       else
-        sh41-utils log -t error "-f|--file flag requires a value"
+        sh41-tui log error "-f|--file flag requires a value"
         exit 1
       fi
       shift
