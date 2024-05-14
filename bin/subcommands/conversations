@@ -28,7 +28,7 @@
 set -e
 
 # log config
-export LOG_NAMESPACE="$SH41_ICON sh41-prompt"
+export LOG_NAMESPACE="$SH41_ICON conversations"
 
 # ╭───┤ Main 
 # ╰─

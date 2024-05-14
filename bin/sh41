@@ -50,10 +50,10 @@ subcommands_home="$SH41_BIN/subcommands"
 subcommand="$1"; shift
 
 case $subcommand in
-  conversations)
+  cnv|conversations)
     "$subcommands_home"/conversations "$@" < /dev/stdin
    ;;
-  providers)
+  pvd|providers)
     "$subcommands_home"/providers "$@" < /dev/stdin
   ;;
   send)
