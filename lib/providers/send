@@ -1,0 +1,60 @@
+#!/usr/bin/env sh
+
+# NAME
+#  send - Send a message to an AI provider.
+#
+# SYNOPSIS
+#  send <provider_name> [...provider specific arguments]
+#
+# STDIN
+#  A JSON object containing the SH41 payload.
+#
+# ENVIROMENT
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+#  SH41_LIB_PROVIDERS_BACKENDS
+#   Path to backends dir, interfaces with the 3rd party LLM providers.
+#
+#  SH41_ICON
+#   SH41 logo icon
+
+# ╭───┤ Bootstrap
+# ╰─
+
+# Exit on first error
+set -e
+
+# shellcheck source=../_fn/trap-debug
+. "$SH41_LIB/_fn/trap-debug"
+
+# log config
+export LOG_NAMESPACE="$SH41_ICON providers/send"
+
+# ╭───┤ Functions
+# ╰─
+
+underline() { 
+  stylize underline "$@"
+}
+
+# ╭───┤ Input validation 
+# ╰─
+
+provider_name="$1"
+if [ -z "$provider_name" ]; then
+  log error "Provider name is required"
+  exit 2
+fi
+
+provider_path="$SH41_LIB_PROVIDERS_BACKENDS/$provider_name"
+if [ ! -f "$provider_path" ]; then
+  log error "Provider $(underline "$provider_name") does not exist.\nTo add a new provider, create a $(underline "$provider_path") file inside providers home: $SH41_LIB_PROVIDERS_BACKENDS"
+  exit 3
+fi
+
+# ╭───┤ Main
+# ╰─
+
+log info "Sending payload to $(underline "$provider_name") provider..."
+"$provider_path" "$@" < /dev/stdin

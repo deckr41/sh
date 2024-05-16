@@ -52,11 +52,11 @@
 # ╭───┤ Bootstrap
 # ╰─
 
-# shellcheck source=../_fn/trap-debug
+# shellcheck source=../../_fn/trap-debug
 . "$SH41_LIB/_fn/trap-debug"
 
 # log config
-export LOG_NAMESPACE="$SH41_ICON sh41-prompt-validate"
+export LOG_NAMESPACE="$SH41_ICON openai-send"
 
 # ╭───┤ Dependency check
 # ╰─ 

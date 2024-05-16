@@ -1,11 +1,22 @@
 #!/usr/bin/env sh
 
 # NAME
-#  providers -
+#  providers - Entry point for all things Providers
 #
 # SYNOPSIS
 #  providers list
 #  providers exist <provider>
+#  providers send <provider> [...args]
+#
+# ENVIRONMENT
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+#  SH41_BIN_SUBCOMMANDS
+#   Path to SH41 subcommands inside the public bin directory.
+#
+#  SH41_ICON
+#   SH41 logo icon
 
 # ╭───┤ Bootstrap
 # ╰─
@@ -14,30 +25,24 @@
 set -e
 
 # log config
-export LOG_NAMESPACE="$SH41_ICON sh41-provider"
-
-# ╭───┤ Functions
-# ╰─
-
-list() {
-  find "$PROVIDERS_HOME" -mindepth 1 -type f -exec basename {} \; \
-    | sort
-}
-
-exists() {
-  if [ ! -f "$PROVIDERS_HOME/$1" ]; then
-    log error "provider \"$1\" does not exist"
-    exit 1
-  fi
-}
+export LOG_NAMESPACE="$SH41_ICON providers"
 
 # ╭───┤ Main 
 # ╰─
 
-PROVIDERS_HOME="$SH41_LIB/providers"
+export SH41_LIB_PROVIDERS="$SH41_LIB/providers"
+export SH41_LIB_PROVIDERS_BACKENDS="$SH41_LIB_PROVIDERS/backends"
 
-case "$1" in
-  list) list ;; 
-  exists) exists "$2" ;;
-  *) log error "Unknown command $1"; exit 1 ;;
+subcommand="$1"; shift
+case "$subcommand" in
+  list) exec "$SH41_LIB_PROVIDERS"/list "$@" < /dev/stdin ;;
+  exists) exec "$SH41_LIB_PROVIDERS"/exists "$@" < /dev/stdin ;;
+  send) 
+    stdin_input=$(cat)
+    printf "%s" "$stdin_input" \
+      | "$SH41_BIN_SUBCOMMANDS"/conversations validate
+    printf "%s" "$stdin_input" \
+      | "$SH41_LIB_PROVIDERS"/send "$@"
+  ;;
+  *) log error "Unknown subcommand $(stylize u "$subcommand")"; exit 1 ;;
 esac
