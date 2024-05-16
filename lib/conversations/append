@@ -1,21 +1,20 @@
 #!/usr/bin/env sh
 
 # SYNOPSIS
-#  append -r|--role <value> -c|--content <value>
-#         -f|--file <value>
+#  append -r|--role <role_name> -c|--content <content_value>
+#  append -f|--file <file_path>
 #
 # OPTIONS
-#  -r|--role <value>
+#  -r|--role <role_name>
 #   The role of the message.
 #
-#  -c|--content <value>
+#  -c|--content <content_value>
 #   The content of the message.
 #
 # OR 
 #
-#  -f|--file <value>
+#  -f|--file <file_path>
 #   The path to a file containing the content of the message.
-#   Cannot be used together with -r|--role and -c|--content.
 #
 # ERROR CODES
 #  1 - Argument/flag parsing error
@@ -31,7 +30,7 @@
 . "$SH41_LIB/_fn/trap-debug"
 
 # log config
-export LOG_NAMESPACE="$SH41_ICON conversations-append"
+export LOG_NAMESPACE="$SH41_ICON conversations/append"
 
 # ╭───┤ Argument parsing
 # ╰─

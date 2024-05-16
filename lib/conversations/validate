@@ -18,7 +18,7 @@
 . "$SH41_LIB/_fn/trap-debug"
 
 # log config
-export LOG_NAMESPACE="$SH41_ICON conversations-validate"
+export LOG_NAMESPACE="$SH41_ICON conversations/validate"
 
 # ╭───┤ Main
 # ╰─
