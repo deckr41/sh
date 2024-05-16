@@ -1,27 +1,30 @@
 #!/usr/bin/env sh
 
 # SYNOPSIS
-#  build [-f|--file <file_path>] [-v|--var <name> <value>]
+#  build [-f|--file <file_path>] [-v|--var <var_key> <var_value>] [-t|--tag <tag_name>]
 #
 # DESCRIPTION
-#  Internal subcommand for building a JSON conversation structure based on a
-#  initial prompt. 
-#
-#  The prompt can contain template keys, {{ key }}, that are replaced with
-#  values passed as additional context.
+#  Build a conversation structure based on a an initial prompt.
 #
 # OPTIONS
-#  -v|--var <key> <value>
-#   Additional context sent together with the prompt. Must be a key-value pair
-#   where the key can be referenced and interpolated in the prompt 
-#   via {{ key }}.
+#  -t|--tag <tag_name>
+#   A string added to the conversation 'tags' array. 
+#
+#   The tag name must be alphanumeric, start with a letter and contain only 
+#   hyphens and forward slashes.
+#
+#  -v|--var <var_key> <var_value>
+#   A key-value pair where the key can be referenced and interpolated in the
+#   prompt via {{ key }}.
 #   
-#   If a key is not present in the prompt, the value will be appended as a
-#   separate 'system' message in the JSON messages array.
+#   If a key is not present in the prompt an error is thrown.
+#
+#   The key must be alphanumeric, start with a letter and contain only
+#   hyphens and underscores.
 #
 #  -f|--file <file_path>
-#   Additional context sent together with the prompt. The file content is
-#   appended as a separate 'system' message in the JSON messages array.
+#   A file whose contents are added to the conversation as a separate message
+#   using the 'system' role.
 #
 # EXAMPLES 
 #  $ prompt="what is the meaning of life?" 
@@ -46,8 +49,8 @@
 #  }
 #
 # ERROR CODES
-#  1 - Argument/flag parsing error
-#  2 - File not found
+#  1: Invalid input - parsing error of stdin, argument or flag parsing
+#  2: File not found
 #  
 # SEE ALSO
 #  jq(1)
@@ -59,7 +62,7 @@
 . "$SH41_LIB/_fn/trap-debug"
 
 # log config
-export LOG_NAMESPACE="$SH41_ICON conversations-build"
+export LOG_NAMESPACE="$SH41_ICON conversations/build"
 
 # ╭───┤ Global variables
 # ╰─
@@ -67,7 +70,9 @@ export LOG_NAMESPACE="$SH41_ICON conversations-build"
 PROMPT=$(cat)
 CONVERSATION="{
   \"id\": \"$(uuidgen)\",
-  \"messages\": []
+  \"messages\": [],
+  \"tags\": [],
+  \"meta\": {}
 }"
 
 # ╭───┤ Functions
@@ -98,9 +103,16 @@ interpolate_prompt() {
 
 # Check if the given key string is valid.
 # Must start with a letter, contain only alphanumeric characters, 
-# underscores or hyphens.
+# hyphens and underscores.
 is_valid_key() {
   printf '%s' "$1" | grep -Eq "^[a-zA-Z][a-zA-Z0-9_-]*$"
+}
+
+# Check if the given tag string is valid.
+# Must start with a letter, contain only alphanumeric characters, 
+# hyphens and forward slashes.
+is_valid_tag() {
+  printf '%s' "$1" | grep -Eq "^[a-zA-Z][a-zA-Z0-9/-]*$"
 }
 
 # ╭───┤ Input validation 
@@ -116,6 +128,22 @@ fi
 
 while [ "$#" -gt 0 ]; do
   case $1 in
+    -t|--tag)
+      if [ "$2" ] && [ "${2#-}" = "$2" ]; then
+        tag=$2; shift
+      else
+        log error "-t|--tag flag requires a value"
+        exit 1
+      fi
+
+      if ! is_valid_tag "$tag"; then
+        log error "Invalid tag name \"$tag\". Tags must be alphanumeric and contain only hyphens and forward slashes"
+        exit 1
+      fi
+
+      CONVERSATION=$(printf '%s' "$CONVERSATION" \
+        | jq --arg tag "$tag" '.tags += [$tag]')
+    ;;
     -f|--file)
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
         file_path="$2"; shift
@@ -130,7 +158,7 @@ while [ "$#" -gt 0 ]; do
       fi
 
       CONVERSATION=$(printf '%s' "$CONVERSATION" \
-        | "$SH41_LIB"/conversations/append --debug --file "$file_path")
+        | "$SH41_LIB_CONVERSATIONS"/append --debug --file "$file_path")
     ;;
     -v|--var)
       if [ "$2" ] && [ "${2#-}" = "$2" ]; then
@@ -154,7 +182,7 @@ while [ "$#" -gt 0 ]; do
       # Key not found in prompt, adding data as separate message
       if [ $? -eq 3 ]; then
         CONVERSATION=$(printf '%s' "$CONVERSATION" \
-          | "$SH41_LIB"/conversations/append --role "context" --content "$key: $value")
+          | "$SH41_LIB_CONVERSATIONS"/append --role "context" --content "$key: $value")
       fi
     ;;
     --) shift; break ;;
@@ -168,5 +196,5 @@ done
 # ╰─
 
 printf '%s' "$CONVERSATION" \
-  | "$SH41_LIB"/conversations/append --role "user" --content "$PROMPT"
+  | "$SH41_LIB_CONVERSATIONS"/append --role "user" --content "$PROMPT"
 

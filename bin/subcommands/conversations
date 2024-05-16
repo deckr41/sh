@@ -1,25 +1,19 @@
 #!/usr/bin/env sh
 
 # NAME
-#  conversations - Index script for multiple prompt commands.
+#  conversations - Entry point for all things Conversations
 #
 # SYNOPSIS
-#  conversations build [...]
-#  conversations append [...]
-#  conversations validate [...]
-#
-# DESCRIPTION
-#  Index script for multiple commands: build, mutate and append.
-#  The script passes along any stdin data and arguments to the underlying
-#  command.
-#
-#  Prompt passing only via stdin is a design choice to enforce a consistent
-#  interface across all commands and to avoid common "argument size limit
-#  exceeded" errors, since prompts texts/message payloads can be quite large.
+#  conversations build [...args]
+#  conversations append [...args]
+#  conversations validate [...args]
 #
 # ENVIRONMENT
 #  SH41_LIB
-#   The path to the utilities home directory.
+#   Path to SH41 internal lib directory.
+#
+#  SH41_ICON
+#   SH41 logo icon
 
 # ╭───┤ Bootstrap
 # ╰─
@@ -30,23 +24,20 @@ set -e
 # log config
 export LOG_NAMESPACE="$SH41_ICON conversations"
 
+if ! command -v "jq" >/dev/null 2>&1; then
+  log error "jq is required to run this script"
+  exit 1
+fi
+
 # ╭───┤ Main 
 # ╰─
 
-prompt_home="$SH41_LIB/conversations"
+export SH41_LIB_CONVERSATIONS="$SH41_LIB/conversations"
 
-case $1 in
-  build)
-    shift
-    "$prompt_home"/build "$@" < /dev/stdin
-  ;;
-  append)
-    shift
-    "$prompt_home"/append "$@" < /dev/stdin
-  ;;
-  validate)
-    shift
-    "$prompt_home"/validate "$@" < /dev/stdin
-  ;;
-  *) log error "Unknown argument $1"; exit 1 ;;
+subcommand="$1"; shift
+case $subcommand in
+  build) exec "$SH41_LIB_CONVERSATIONS"/build "$@" < /dev/stdin ;;
+  append) exec "$SH41_LIB_CONVERSATIONS"/append "$@" < /dev/stdin ;;
+  validate) exec "$SH41_LIB_CONVERSATIONS"/validate "$@" < /dev/stdin ;;
+  *) log error "Unknown subcommand $(stylize u "$subcommand")"; exit 1 ;;
 esac

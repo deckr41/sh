@@ -9,13 +9,13 @@
 #  sh41 send [...]
 #
 # ENVIROMENT
-#  SH41_BIN
+#  <SH41_BIN>
 #   Path to SH41 public bin directory.
 #
-#  SH41_LIB
+#  <SH41_LIB>
 #   Path to SH41 internal lib directory.
 #
-#  SH41_ICON
+#  <SH41_ICON>
 #   SH41 logo icon
 #
 # ERRORS
@@ -30,6 +30,7 @@ set -e
 
 # log config
 export LOG_NAMESPACE="$SH41_ICON sh41"
+# export LOG_LEVEL="$([ -n "$SH41_DEBUG" ] && echo "info" || echo "warn")"
 
 # trap-debug config
 export TD_ROOT_PID="$PPID"
@@ -38,31 +39,15 @@ export TD_BASE_PATH="$SH41_HOME"
 # Expose all internal utility scripts for the duration of the process
 export PATH="$SH41_LIB/_scripts:$PATH"
 
-if ! command -v "jq" >/dev/null 2>&1; then
-  log error "jq is required to run this script"
-  exit 1
-fi
-
 # ╭───┤ Main
 # ╰─
 
-subcommands_home="$SH41_BIN/subcommands"
-subcommand="$1"; shift
+export SH41_BIN_SUBCOMMANDS="$SH41_BIN/subcommands"
 
+subcommand="$1"; shift
 case $subcommand in
-  cnv|conversations)
-    "$subcommands_home"/conversations "$@" < /dev/stdin
-   ;;
-  pvd|providers)
-    "$subcommands_home"/providers "$@" < /dev/stdin
-  ;;
-  send)
-    stdin_input=$(cat)
-    printf "%s" "$stdin_input" | "$subcommands_home"/conversations validate
-    printf "%s" "$stdin_input" | "$subcommands_home"/send "$@"
-  ;;
-  *) 
-    log error "Unknown argument $subcommand"
-    exit 2
-  ;;
+  cnv|conversations) "$SH41_BIN_SUBCOMMANDS"/conversations "$@" < /dev/stdin ;;
+  pvd|providers) "$SH41_BIN_SUBCOMMANDS"/providers "$@" < /dev/stdin ;;
+  db) "$SH41_BIN_SUBCOMMANDS"/db "$@" < /dev/stdin ;;
+  *) log error "Unknown subcommand $(stylize u "$subcommand")"; exit 2 ;;
 esac
