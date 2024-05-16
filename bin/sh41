@@ -15,6 +15,12 @@
 #  <SH41_LIB>
 #   Path to SH41 internal lib directory.
 #
+#  [SH41_DB]
+#   Database URI formated as `<db_type>://<connection_string>`, where:
+#   - `db_type`: `sqlite` and `postgres`
+#   - `://`: separator
+#   - `connection_string`: where and how to connect, specific to the `db_type`
+#
 #  <SH41_ICON>
 #   SH41 logo icon
 #
@@ -43,6 +49,10 @@ export PATH="$SH41_LIB/_scripts:$PATH"
 # ╰─
 
 export SH41_BIN_SUBCOMMANDS="$SH41_BIN/subcommands"
+
+if [ -n "$SH41_DB" ]; then
+  "$SH41_BIN_SUBCOMMANDS/db" health-check
+fi
 
 subcommand="$1"; shift
 case $subcommand in
