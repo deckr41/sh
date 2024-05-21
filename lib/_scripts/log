@@ -4,11 +4,15 @@
 #  log - Print a fancy log message
 #
 # SYNOPSIS
-#  log <type> [-nc|--no-color] <message>
+#  log <type> [-nc|--no-color] [-v|--var <name> <value>] <message>
 #
 # FLAGS
 #  [-ns|--no-color]
 #   Do not print colors or icons.
+#
+# OPTIONS
+#  [-v|--var <name> <value>]
+#   Print a variable name and its value after the message text.
 #
 # ARGUMENTS
 #  <type=error>
@@ -42,7 +46,7 @@ set_theme() {
 }
 
 log_plain() {
-  echo "$(date +%T) $TYPE_LABEL ${LOG_NAMESPACE:+$LOG_NAMESPACE: }$1"
+  echo "$(date +%T) $TYPE_LABEL ${LOG_NAMESPACE:+$LOG_NAMESPACE: }$1 $2"
 }
 
 log_with_style() {
@@ -52,7 +56,7 @@ log_with_style() {
     styled_namespace=$(color gray "$LOG_NAMESPACE: ")
   fi
 
-  echo "$(date +%T) $styled_type_label $styled_namespace$1"
+  echo "$(date +%T) $styled_type_label $styled_namespace$1 $2"
 }
 
 # ╭───┤ Argument parsing
@@ -60,10 +64,30 @@ log_with_style() {
 
 message_type=${1:-error}; shift
 has_color=$([ -n "$CI" ] && echo "" || echo "true")
+variables=""
 
 while [ "$#" -gt 0 ]; do
   case $1 in
     -nc|--no-color) has_color=""; shift ;;
+    -v|--var)
+      if [ "$2" ] && [ "${2#-}" = "$2" ]; then
+        key=$2; shift
+      else
+        echo "-v|--var flag requires a key" >&2
+        exit 1
+      fi
+
+      if [ "${2#-}" = "$2" ]; then
+        value="$2"; shift
+      fi
+
+      if [ -n "$has_color" ]; then
+        variables="$variables$(color gray "$key=")$value "
+      else 
+        variables="$variables $key=$value"
+      fi
+      shift
+    ;;
     *) break ;;
   esac
 done
@@ -74,8 +98,8 @@ done
 set_theme "$message_type"
 
 if [ -z "$has_color" ]; then
-  log_plain "$1" >&2
+  log_plain "$1" "$variables" >&2
 else
-  log_with_style "$1" >&2
+  log_with_style "$1" "$variables" >&2
 fi
 
