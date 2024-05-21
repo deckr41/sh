@@ -1,23 +1,28 @@
 #!/usr/bin/env sh
 
 # NAME
-#  db - 
+#  db - Entry point for all database related commands.
 #
 # SYNOPSIS
 #  db init <db_uri>
 #
 # ENVIRONMENT
+#  SH41_DB
+#   - URI template: <db_type>://<connection_string>
+#   - <db_type>: `sqlite` and `postgres`
+#   - <connection_string>: 
+#
+#  SH41_DB_TYPE
+#   Type of the database. `sqlite` or `postgres`.
+#
+#  SH41_DB_CONNECTION
+#   Database specific connection string.
+#
 #  SH41_LIB
 #   Path to SH41 internal lib directory.
 #
-#  SH41_DB
-#   Database URI formated as `<db_type>://<connection_string>`, where:
-#   - `db_type`: `sqlite` and `postgres`
-#   - `://`: separator
-#   - `connection_string`: where and how to connect, specific to the `db_type`
-#
 #  SH41_ICON
-#   SH41 logo icon
+#   SH41 logo icon.
 
 # ╭───┤ Bootstrap
 # ╰─
@@ -26,17 +31,22 @@
 set -e
 
 # log config
-export LOG_NAMESPACE="$SH41_ICON db"
+export LOG_NAMESPACE="󱘷 db"
 
 # ╭───┤ Main 
 # ╰─
 
 export SH41_DB_HOME="$SH41_LIB/db"
-export SH41_DB_TYPE="${SH41_DB%%://*}"
-export SH41_DB_CONNECTION="${SH41_DB#*://}"
 
-subcommand="$1"; shift
+subcommand="$1";
+if [ -z "$subcommand" ]; then
+  log error "No command provided"
+  exit 1
+fi
+shift
+
 case $subcommand in
-  health-check) exec "$SH41_DB_HOME"/health-check "$@" < /dev/stdin ;;
-  *) log error "Unknown subcommand $(stylize u "$subcommand")"; exit 1 ;;
+  health-check) exec "$SH41_DB_HOME"/init --health-check "$@" < /dev/stdin ;;
+  init) exec "$SH41_DB_HOME"/init "$@" < /dev/stdin ;;
+  *) log error -v cmd "$subcommand" "Unknown command"; exit 1 ;;
 esac

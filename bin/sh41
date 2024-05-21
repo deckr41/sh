@@ -9,24 +9,22 @@
 #  sh41 send [...]
 #
 # ENVIROMENT
-#  <SH41_BIN>
+#  SH41_BIN
 #   Path to SH41 public bin directory.
 #
-#  <SH41_LIB>
+#  SH41_LIB
 #   Path to SH41 internal lib directory.
 #
-#  [SH41_DB]
-#   Database URI formated as `<db_type>://<connection_string>`, where:
-#   - `db_type`: `sqlite` and `postgres`
-#   - `://`: separator
-#   - `connection_string`: where and how to connect, specific to the `db_type`
+#  SH41_DB
+#   - URI template: <db_type>://<connection_string>
+#   - <db_type>: `sqlite` and `postgres`
+#   - <connection_string>: 
 #
-#  <SH41_ICON>
+#  SH41_ICON
 #   SH41 logo icon
 #
 # ERRORS
-#  1: Missing OS dependency
-#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#  1: Invalid input - parsing error of stdin, argument or flag parsing
 
 # ╭───┤ Bootstrap
 # ╰─
@@ -45,19 +43,44 @@ export TD_BASE_PATH="$SH41_HOME"
 # Expose all internal utility scripts for the duration of the process
 export PATH="$SH41_LIB/_scripts:$PATH"
 
+export SH41_BIN_SUBCOMMANDS="$SH41_BIN/subcommands"
+export SH41_DB_TYPE="${SH41_DB%%://*}"
+export SH41_DB_CONNECTION="${SH41_DB#*://}"
+
+# ╭───┤ Functions
+# ╰─
+
+# Check database health, only print to stderr if there is an issue
+check_db_health() {
+  set +e
+  db_status=$("$SH41_BIN_SUBCOMMANDS"/db init --health-check 2>&1)
+  if [ "$?" -ne 0 ]; then
+    echo "$db_status" >&2
+    exit 2
+  fi
+  set -e
+}
+
 # ╭───┤ Main
 # ╰─
 
-export SH41_BIN_SUBCOMMANDS="$SH41_BIN/subcommands"
-
-if [ -n "$SH41_DB" ]; then
-  "$SH41_BIN_SUBCOMMANDS/db" health-check
+subcommand="$1";
+if [ -z "$subcommand" ]; then
+  log error "No command provided"
+  exit 1
 fi
+shift
 
-subcommand="$1"; shift
 case $subcommand in
-  cnv|conversations) "$SH41_BIN_SUBCOMMANDS"/conversations "$@" < /dev/stdin ;;
-  pvd|providers) "$SH41_BIN_SUBCOMMANDS"/providers "$@" < /dev/stdin ;;
+  conversations|providers)
+    check_db_health
+    "$SH41_BIN_SUBCOMMANDS/$subcommand" "$@" < /dev/stdin
+  ;;
+  init)
+    "$SH41_BIN_SUBCOMMANDS"/config init "$@" < /dev/stdin
+    "$SH41_BIN_SUBCOMMANDS"/db init "$@" < /dev/stdin
+  ;;
+  config) "$SH41_BIN_SUBCOMMANDS"/config "$@" < /dev/stdin ;;
   db) "$SH41_BIN_SUBCOMMANDS"/db "$@" < /dev/stdin ;;
-  *) log error "Unknown subcommand $(stylize u "$subcommand")"; exit 2 ;;
+  *) log error -v cmd "$subcommand" "Unknown command"; exit 1 ;;
 esac

@@ -1,0 +1,40 @@
+#!/usr/bin/env sh
+
+# NAME
+#  config - Entry point for all internal configuration commands.
+#
+# SYNOPSIS
+#  config init
+#  config status
+#
+# ENVIRONMENT
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+#  SH41_ICON
+#   SH41 logo icon.
+
+# ╭───┤ Bootstrap
+# ╰─
+
+# Exit on first error
+set -e
+
+# log config
+export LOG_NAMESPACE=" config"
+
+# ╭───┤ Main 
+# ╰─
+
+subcommand="$1"; 
+if [ -z "$subcommand" ]; then
+  log error "No command provided"
+  exit 1
+fi
+shift
+
+case "$subcommand" in
+  health-check) exec "$SH41_LIB"/config/init --health-check "$@" < /dev/stdin ;;
+  init) exec "$SH41_LIB"/config/init "$@" < /dev/stdin ;;
+  *) log error -v cmd "$subcommand" "Unknown command"; exit 1 ;;
+esac

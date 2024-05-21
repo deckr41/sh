@@ -1,0 +1,100 @@
+#!/usr/bin/env sh
+
+# NAME
+#  init - 
+#
+# SYNOPSIS
+#  init [-hc|--health-check]
+#
+# ENVIRONMENT
+#  SH41_CONFIG
+#   Path to user's SH41 config file.
+#
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+#  SH41_ICON
+#   SH41 logo icon.
+
+# ╭───┤ Bootstrap
+# ╰─
+
+# log config
+export LOG_NAMESPACE=" init"
+
+# shellcheck source=../_fn/trap-debug
+. "$SH41_LIB/_fn/trap-debug"
+
+# ╭───┤ Functions
+# ╰─
+
+check_user() {
+  if [ ! -e "$SH41_CONFIG" ]; then
+    log error -v path "$SH41_CONFIG" "Config file not found"
+    return 2
+  fi
+
+  log success -v path "$SH41_CONFIG" "Config file exists"
+}
+
+configure_user() {
+  mkdir -p "$(dirname "$SH41_CONFIG")"
+  cp "$SH41_HOME"/rc.sh "$SH41_CONFIG"
+
+  if [ -e "$SH41_CONFIG" ]; then 
+    log success -v path "$SH41_CONFIG" "Config file created"
+  fi
+}
+
+check_emoji_support() {
+  font_name=$(fc-match monospace | awk -F '"' '{print $2}')
+
+  if echo "$font_name" | grep -q "Nerd"; then
+    log success -v font "$font_name" "Nerd font detected 󰱲"
+  else
+    log warn -v font "$font_name" "Nerd font not detected, some icons may not render correctly"
+  fi
+}
+
+check_dependencies() {
+  dependencies="jq curl fzf bat"
+  for dependency in $dependencies; do
+    if ! command -v "$dependency" > /dev/null; then
+      log error -v dependency "$dependency" "Dependency not found"
+      has_error="true"
+    fi
+  done
+
+  if [ -z "$has_error" ]; then
+    log success -v dependencies "$dependencies" "All dependencies installed"
+  fi
+}
+
+# ╭───┤ Input validation
+# ╰─
+
+SHOULD_INIT="true"
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -hc|--health-check)
+      SHOULD_INIT="" 
+      export LOG_NAMESPACE=" init (health check)"
+    ;;
+    --) shift; break ;;
+    -?*) log error "Unknown flag: $1"; exit 1 ;;
+    *) break ;;
+  esac
+  shift
+done
+
+# ╭───┤ Main 
+# ╰─
+
+if ! check_user; then 
+  [ "$SHOULD_INIT" = "true" ] && configure_user || exit 2
+fi
+
+check_emoji_support
+check_dependencies
+

@@ -1,0 +1,137 @@
+#!/usr/bin/env sh
+
+# SYNOPSIS
+#  init [-hc|--health-check]
+#
+# FLAGS
+#  [-hc|--health-check]   
+#   Just check if the database connection is working, dont create anything.
+#
+# ENVIRONMENT
+#  SH41_DB_TYPE
+#   Type of database to use. Possible values: `sqlite`, `postgres`.
+#  
+#  SH41_DB_CONNECTION
+#   Connection string for the database, depending on the `db_type`.
+#
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+#  SH41_ICON
+#   SH41 logo icon.
+#
+# ERRORS
+#  1: Invalid input - parsing error of stdin, argument or flag parsing
+
+# ╭───┤ Bootstrap
+# ╰─
+
+# log config
+export LOG_NAMESPACE="󱘷 init"
+
+# shellcheck source=../_fn/trap-debug
+. "$SH41_LIB/_fn/trap-debug"
+
+# ╭───┤ Functions
+# ╰─
+
+check_sqlite() {
+  if [ ! -e "$SH41_DB_CONNECTION" ]; then
+    log error \
+      -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
+      "DB file does not exist"
+    return 2
+  fi
+
+  log success \
+    -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
+    "DB file exists"
+}
+
+configure_sqlite() {
+  mkdir -p "$(dirname "$SH41_DB_CONNECTION")"
+  touch "$SH41_DB_CONNECTION"
+
+  if [ ! -e "$SH41_DB_CONNECTION" ]; then
+    log error \
+      -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
+      "DB file could not be created"
+    return 2
+  fi
+
+  log success \
+    -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
+    "DB file created"
+}
+
+test_sqlite() {
+  if ! sqlite3 "$SH41_DB_CONNECTION" "SELECT name FROM sqlite_master" > /dev/null 2>&1; then
+    log error \
+      -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
+      "DB file exists but sqlite3 cannot read it"
+    exit 2
+  fi
+
+  log success \
+    -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
+    "DB exists and sqlite3 can read it"
+}
+
+check_postgres() {
+  log error "Postgres support is not implemented yet"
+  return 2
+}
+
+configure_postgres() {
+  log error "Postgres support is not implemented yet"
+  exit 2
+}
+
+test_postgres() {
+  log error "Postgres support is not implemented yet"
+  exit 2
+}
+
+# ╭───┤ Input validation
+# ╰─
+
+SHOULD_INIT="true"
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -hc|--health-check) 
+      SHOULD_INIT="" 
+      export LOG_NAMESPACE="󱘷 init (health check)"
+    ;;
+    --) shift; break ;;
+    -?*) log error "Unknown flag: $1"; exit 1 ;;
+    *) break ;;
+  esac
+  shift
+done
+
+# ╭───┤ Main
+# ╰─
+
+case "$SH41_DB_TYPE" in
+  sqlite)
+    if ! check_sqlite; then
+      [ -n "$SHOULD_INIT" ] && configure_sqlite || exit 2
+    fi
+    test_sqlite
+  ;;
+  postgres)
+    if ! check_postgres; then
+      [ -n "$SHOULD_INIT" ] &&  configure_postgres || exit 2
+    fi
+    test_postgres
+  ;;
+  *)
+    log error \
+      -v "\$SH41_DB" "$SH41_DB" \
+      -v supported_type "sqlite, postgres" \
+      -v "\$SH41_CONFIG" "$SH41_CONFIG" \
+      "Invalid type, update \$SH41_DB variable in \$SH41_CONFIG file"
+    exit 2
+  ;;
+esac
