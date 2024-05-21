@@ -33,7 +33,13 @@ export LOG_NAMESPACE="$SH41_ICON providers"
 export SH41_LIB_PROVIDERS="$SH41_LIB/providers"
 export SH41_LIB_PROVIDERS_BACKENDS="$SH41_LIB_PROVIDERS/backends"
 
-subcommand="$1"; shift
+subcommand="$1";
+if [ -z "$subcommand" ]; then
+  log error "No command provided"
+  exit 1
+fi
+shift
+
 case "$subcommand" in
   list) exec "$SH41_LIB_PROVIDERS"/list "$@" < /dev/stdin ;;
   exists) exec "$SH41_LIB_PROVIDERS"/exists "$@" < /dev/stdin ;;
@@ -44,5 +50,5 @@ case "$subcommand" in
     printf "%s" "$stdin_input" \
       | "$SH41_LIB_PROVIDERS"/send "$@"
   ;;
-  *) log error "Unknown subcommand $(stylize u "$subcommand")"; exit 1 ;;
+  *) log error -v cmd "$subcommand" "Unknown command"; exit 1 ;;
 esac

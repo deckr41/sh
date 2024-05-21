@@ -24,20 +24,21 @@ set -e
 # log config
 export LOG_NAMESPACE="$SH41_ICON conversations"
 
-if ! command -v "jq" >/dev/null 2>&1; then
-  log error "jq is required to run this script"
-  exit 1
-fi
-
 # ╭───┤ Main 
 # ╰─
 
 export SH41_LIB_CONVERSATIONS="$SH41_LIB/conversations"
 
-subcommand="$1"; shift
+subcommand="$1";
+if [ -z "$subcommand" ]; then
+  log error "No command provided"
+  exit 1
+fi
+shift
+
 case $subcommand in
   build) exec "$SH41_LIB_CONVERSATIONS"/build "$@" < /dev/stdin ;;
   append) exec "$SH41_LIB_CONVERSATIONS"/append "$@" < /dev/stdin ;;
   validate) exec "$SH41_LIB_CONVERSATIONS"/validate "$@" < /dev/stdin ;;
-  *) log error "Unknown subcommand $(stylize u "$subcommand")"; exit 1 ;;
+  *) log error -v cmd "$subcommand" "Unknown command"; exit 1 ;;
 esac
