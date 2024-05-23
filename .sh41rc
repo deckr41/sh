@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+
+# ╭───────┤  Debug mode
+# │ Set to true to enable all log messages, info, warn and error. 
+# │ Unset to log only error messages.
+# ╰─
+
+export SH41_DEBUG="true"
+
+# ╭───────┤ 󰆼 Database connection string
+# │ URI template: <db_type>://<connection_string>
+# │ - <db_type>: `sqlite` or `postgres`
+# │ - <connection_string>: where and how to connect, specific to <db_type>
+# ╰─
+
+export SH41_DB="sqlite://$SH41_LOCAL/sh41.sqlite"
+# export SH41_DB="postgres://user:password@localhost:5432/sh41"
+
+# ╭───────┤ 󰘓 Keep it hidden, keep it safe! 
+# ╰─
+
+# shellcheck source=./.env
+. "$(dirname "$0")/.env"
+

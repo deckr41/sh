@@ -7,14 +7,35 @@
 #  init [-hc|--health-check]
 #
 # ENVIRONMENT
-#  SH41_CONFIG
+#  SH41_CONFIG_HOME
+#   Path to user's SH41 config directory.
+#
+#  SH41_CONFIG_RC 
 #   Path to user's SH41 config file.
 #
 #  SH41_LIB
 #   Path to SH41 internal lib directory.
 #
-#  SH41_ICON
-#   SH41 logo icon.
+# SEE ALSO
+#  fc-match(1)
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_CONFIG_HOME" ]; then
+  log error -v var_name "\$SH41_CONFIG_HOME" "Missing environment variable"
+  exit 1
+fi
+
+if [ -z "$SH41_CONFIG_RC" ]; then
+  log error -v var_name "\$SH41_CONFIG_RC" "Missing environment variable"
+  exit 1
+fi
+
+if [ -z "$SH41_LIB" ]; then
+  log error -v var_name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
 
 # ╭───┤ Bootstrap
 # ╰─
@@ -29,31 +50,35 @@ export LOG_NAMESPACE=" init"
 # ╰─
 
 check_user() {
-  if [ ! -e "$SH41_CONFIG" ]; then
-    log error -v path "$SH41_CONFIG" "Config file not found"
+  if [ ! -e "$SH41_CONFIG_RC" ]; then
+    log error -v "\$SH41_CONFIG_RC" "$SH41_CONFIG_RC" "Config file not found"
     return 2
   fi
 
-  log success -v path "$SH41_CONFIG" "Config file exists"
+  log success -v "\$SH41_CONFIG_RC" "$SH41_CONFIG_RC" "Config file exists"
 }
 
 configure_user() {
-  mkdir -p "$(dirname "$SH41_CONFIG")"
-  cp "$SH41_HOME"/rc.sh "$SH41_CONFIG"
+  mkdir -p "$(dirname "$SH41_CONFIG_RC")"
 
-  if [ -e "$SH41_CONFIG" ]; then 
-    log success -v path "$SH41_CONFIG" "Config file created"
+  cp "$SH41_HOME"/.sh41rc "$SH41_CONFIG_RC"
+  cp "$SH41_HOME"/.env-example "$SH41_CONFIG_HOME/.env"
+  echo ".env" > "$SH41_CONFIG_HOME/.gitignore"
+
+  if [ -e "$SH41_CONFIG_RC" ]; then 
+    log success -v "\$SH41_CONFIG_RC" "$SH41_CONFIG_RC" "Config files created"
   fi
 }
 
 check_emoji_support() {
   font_name=$(fc-match monospace | awk -F '"' '{print $2}')
 
-  if echo "$font_name" | grep -q "Nerd"; then
-    log success -v font "$font_name" "Nerd font detected 󰱲"
-  else
-    log warn -v font "$font_name" "Nerd font not detected, some icons may not render correctly"
+  if ! echo "$font_name" | grep -q "Nerd"; then
+    log warn -v font "$font_name" \
+      "Nerd font not detected, some icons may not render correctly"
   fi
+
+  log success -v font "$font_name" "Nerd font detected 󰱲"
 }
 
 check_dependencies() {
@@ -66,7 +91,9 @@ check_dependencies() {
   done
 
   if [ -z "$has_error" ]; then
-    log success -v dependencies "$dependencies" "All dependencies installed"
+    log success \
+      -v dependencies "$dependencies" \
+      "All dependencies installed"
   fi
 }
 

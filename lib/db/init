@@ -17,11 +17,16 @@
 #  SH41_LIB
 #   Path to SH41 internal lib directory.
 #
-#  SH41_ICON
-#   SH41 logo icon.
-#
 # ERRORS
 #  1: Invalid input - parsing error of stdin, argument or flag parsing
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_LIB" ]; then
+  log error -v var_name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
 
 # ╭───┤ Bootstrap
 # ╰─
@@ -39,13 +44,13 @@ check_sqlite() {
   if [ ! -e "$SH41_DB_CONNECTION" ]; then
     log error \
       -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
-      "DB file does not exist"
+      "DB does not exist"
     return 2
   fi
 
   log success \
     -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
-    "DB file exists"
+    "DB exists"
 }
 
 configure_sqlite() {
@@ -55,20 +60,20 @@ configure_sqlite() {
   if [ ! -e "$SH41_DB_CONNECTION" ]; then
     log error \
       -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
-      "DB file could not be created"
+      "DB could not be created"
     return 2
   fi
 
   log success \
     -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
-    "DB file created"
+    "DB created"
 }
 
 test_sqlite() {
   if ! sqlite3 "$SH41_DB_CONNECTION" "SELECT name FROM sqlite_master" > /dev/null 2>&1; then
     log error \
       -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
-      "DB file exists but sqlite3 cannot read it"
+      "DB exists but sqlite3 cannot read it"
     exit 2
   fi
 
@@ -115,12 +120,14 @@ done
 
 case "$SH41_DB_TYPE" in
   sqlite)
+    log info -v "\$SH41_DB_TYPE" "$SH41_DB_TYPE" "Sqlite database detected"
     if ! check_sqlite; then
       [ -n "$SHOULD_INIT" ] && configure_sqlite || exit 2
     fi
     test_sqlite
   ;;
   postgres)
+    log info -v "\$SH41_DB_TYPE" "$SH41_DB_TYPE" "Postgres database detected"
     if ! check_postgres; then
       [ -n "$SHOULD_INIT" ] &&  configure_postgres || exit 2
     fi
@@ -128,10 +135,10 @@ case "$SH41_DB_TYPE" in
   ;;
   *)
     log error \
-      -v "\$SH41_DB" "$SH41_DB" \
+      -v "\$SH41_DB_TYPE" "$SH41_DB_TYPE" \
       -v supported_type "sqlite, postgres" \
-      -v "\$SH41_CONFIG" "$SH41_CONFIG" \
-      "Invalid type, update \$SH41_DB variable in \$SH41_CONFIG file"
+      -v "\$SH41_CONFIG_RC" "$SH41_CONFIG_RC" \
+      "Invalid type, update \$SH41_DB variable in \$SH41_CONFIG_RC file"
     exit 2
   ;;
 esac

@@ -10,9 +10,6 @@
 # ENVIRONMENT
 #  SH41_LIB
 #   Path to SH41 internal lib directory.
-#
-#  SH41_ICON
-#   SH41 logo icon.
 
 # ╭───┤ Bootstrap
 # ╰─
