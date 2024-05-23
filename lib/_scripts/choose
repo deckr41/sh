@@ -23,23 +23,42 @@
 # SEE ALSO
 #  fzf(1), log(1)
 
+# ╭───┤ Bootstrap 
+# ╰─
+
+export LOG_NAMESPACE="choose"
+
+# ╭───┤ Parse options
+# ╰─
+
 prompt="Select an option:"
 allow_custom=""
 
 while [ "$#" -gt 0 ]; do
   case $1 in
     --allow-custom) allow_custom="true" ;;
-    -p|--prompt) prompt="$2"; shift ;;
-    -*) log -t error "Unknown parameter: $1" "choose"; exit 1 ;;
+    -p|--prompt) 
+      if [ "$2" ]; then
+        prompt="$2"; shift 
+      else
+        echo "-p|--prompt option requires a value" >&2
+        exit 1
+      fi
+    ;;
+    --) shift; break ;;
+    -*) log error -v name "$1" "Unknown parameter"; exit 1 ;;
     *) break ;;
   esac
   shift
 done
 
 if [ -t 0 ]; then
-  log --type error "No options provided. Options must be passed via stdin." "choose"
+  log error "No options provided. Options must be passed via stdin."
   exit 1
 fi
+
+# ╭───┤ Main
+# ╰─
 
 if [ -n "$allow_custom" ]; then
   fzf --reverse --ansi --print-query \

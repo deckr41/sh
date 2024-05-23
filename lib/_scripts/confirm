@@ -20,6 +20,11 @@
 # SEE ALSO
 #  choose(1)
 
+# ╭───┤ Bootstrap 
+# ╰─
+
+export LOG_NAMESPACE="confirm"
+
 # ╭───┤ Argument parsing
 # ╰─
 
@@ -37,7 +42,8 @@ while [ "$#" -gt 0 ]; do
       allow_cancel="true" 
       options="${options}${delimiter}󰁯 cancel"
     ;;
-    -*) log -t error "Unknown parameter: $1" "confirm"; exit 1 ;;
+    --) shift; break ;;
+    -*) log error -v name "$1" "Unknown parameter"; exit 1 ;;
     *) break ;;
   esac
   shift
