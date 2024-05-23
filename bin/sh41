@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 # NAME
-#  sh41 - An agentic framework for solving problems together with Large Language Models.
+#  sh41 - An interface for solving problems together with Large Language Models.
 #
 # SYNOPSIS
 #  sh41 conversations [...] 
@@ -34,7 +34,7 @@ set -e
 
 # log config
 export LOG_NAMESPACE="$SH41_ICON sh41"
-# export LOG_LEVEL="$([ -n "$SH41_DEBUG" ] && echo "info" || echo "warn")"
+export LOG_LEVEL="$([ -n "$SH41_DEBUG" ] && echo "info" || echo "error")"
 
 # trap-debug config
 export TD_ROOT_PID="$PPID"
@@ -82,5 +82,10 @@ case $subcommand in
   ;;
   config) "$SH41_BIN_SUBCOMMANDS"/config "$@" < /dev/stdin ;;
   db) "$SH41_BIN_SUBCOMMANDS"/db "$@" < /dev/stdin ;;
+  upgrade)
+    "$SH41_BIN_SUBCOMMANDS"/upgrade "$@" < /dev/stdin
+    "$SH41_BIN_SUBCOMMANDS"/config init "$@" < /dev/stdin
+    "$SH41_BIN_SUBCOMMANDS"/db init "$@" < /dev/stdin
+  ;;
   *) log error -v cmd "$subcommand" "Unknown command"; exit 1 ;;
 esac

@@ -1,0 +1,29 @@
+#!/usr/bin/env sh
+
+# NAME
+#  upgrade - Upgrade Shell41 to latest git version.
+#
+# SYNOPSIS
+#  upgrade
+#
+# ENVIRONMENT
+#  SH41_HOME
+#   Path to SH41 installation directory.
+
+# ╭───┤ Bootstrap
+# ╰─
+
+# Exit on first error
+set -e
+
+# log config
+export LOG_NAMESPACE="󰏕 upgrade"
+
+# ╭───┤ Main 
+# ╰─
+
+cd "$SH41_HOME" && {
+  if git pull origin master; then 
+    log success "Shell41 has been upgraded to the latest version."
+  fi
+} 
