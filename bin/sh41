@@ -6,7 +6,10 @@
 # SYNOPSIS
 #  sh41 conversations [...] 
 #  sh41 providers [...]
-#  sh41 send [...]
+#  sh41 init [...]
+#  sh41 config [...]
+#  sh41 db [...]
+#  sh41 upgrade [...]
 #
 # ENVIROMENT
 #  SH41_BIN
@@ -16,9 +19,10 @@
 #   Path to SH41 internal lib directory.
 #
 #  SH41_DB
+#   The full database configuration string:
 #   - URI template: <db_type>://<connection_string>
 #   - <db_type>: `sqlite` and `postgres`
-#   - <connection_string>: 
+#   - <connection_string>: where and how to connect, specific to <db_type>
 #
 #  SH41_ICON
 #   SH41 logo icon
@@ -32,60 +36,157 @@
 # Exit on first error
 set -e
 
-# log config
+# `log` utility configuration
 export LOG_NAMESPACE="$SH41_ICON sh41"
-export LOG_LEVEL="$([ -n "$SH41_DEBUG" ] && echo "info" || echo "error")"
 
-# trap-debug config
-export TD_ROOT_PID="$PPID"
+if [ -z "$LOG_LEVEL" ]; then
+  export LOG_LEVEL="$([ -n "$SH41_DEBUG" ] && echo "info" || echo "error")"
+fi
+
+# `trap-debug` utility configuration
+export TD_ROOT_PID="$$"
 export TD_BASE_PATH="$SH41_HOME"
 
 # Expose all internal utility scripts for the duration of the process
-export PATH="$SH41_LIB/_scripts:$PATH"
+export PATH="$SH41_LIB/_core/scripts:$PATH"
 
-export SH41_BIN_SUBCOMMANDS="$SH41_BIN/subcommands"
 export SH41_DB_TYPE="${SH41_DB%%://*}"
 export SH41_DB_CONNECTION="${SH41_DB#*://}"
 
 # ╭───┤ Functions
 # ╰─
 
-# Check database health, only print to stderr if there is an issue
-check_db_health() {
-  set +e
-  db_status=$("$SH41_BIN_SUBCOMMANDS"/db init --health-check 2>&1)
-  if [ "$?" -ne 0 ]; then
-    echo "$db_status" >&2
-    exit 2
+can_run_cmd() {
+  if [ -z "$1" ] || [ ! -x "$1" ]; then
+    return 1
   fi
-  set -e
+
+  return 0
+}
+
+run_cmd() {
+  cmd_home="$1"; shift
+  subcommand="$1"
+  if [ -z "$subcommand" ]; then
+    log error -v cmd_home "$cmd_home" "No subcommand provided"
+    exit 1
+  fi
+  shift
+
+  if ! can_run_cmd "$cmd_home/$subcommand"; then
+    log error -v cmd_home "$cmd_home" -v subcommand "$subcommand" \
+      "Unknown subcommand"
+    exit 1
+  fi
+  
+  "$cmd_home/$subcommand" "$@" < /dev/stdin
+}
+
+run_system_cmd() {
+  export LOG_NAMESPACE=" system"
+  export SH41_SELF_HOME="$SH41_LIB/_core/system"
+  run_cmd "$SH41_SELF_HOME" "$@" 
+}
+
+run_db_cmd() {
+  export LOG_NAMESPACE="󱘷 db"
+  export SH41_DB_HOME="$SH41_LIB/_core/db"
+  export SH41_DB_BACKUPS="$SH41_LOCAL/db_backups"
+
+  if [ "$1" = "init" ]; then
+    run_cmd "$SH41_DB_HOME" "$@" \
+      --schemas "$SH41_LIB/*/$SH41_DB_TYPE/schema.sql"
+  else
+    run_cmd "$SH41_DB_HOME" "$@"
+  fi
+}
+
+run_app_cmd() {
+  export SH41_ORM_HOME="$SH41_LIB/_core/db/$SH41_DB_TYPE/orm"
+  export PATH="$SH41_ORM_HOME:$PATH"
+
+  cmd="$1"; shift
+  subcommand="$1"
+  if [ -z "$subcommand" ]; then
+    log error -v cmd "$cmd" "No subcommand provided"; exit 1
+  fi
+  shift
+
+  # Run dedicated command
+  if can_run_cmd "$SH41_LIB/$cmd/$subcommand"; then
+    if [ -z "$SH41_USER_ID" ]; then
+      log error -v cmd "$cmd" -v subcommand "$subcommand" \
+        "This command requires an identity via \$SH41_USER_ID";
+      exit 1
+    fi
+
+    "$SH41_LIB/$cmd/$subcommand" "$@" < /dev/stdin
+    exit $?
+  fi
+
+  # Run generic db command
+  if can_run_cmd "$SH41_ORM_HOME/db-$subcommand"; then
+    "$SH41_ORM_HOME/db-$subcommand" "$cmd" "$@" < /dev/stdin
+    exit $?
+  fi
+
+  log error -v cmd "$cmd" -v subcommand "$subcommand" \
+    "Unknown subcommand"
 }
 
 # ╭───┤ Main
 # ╰─
 
-subcommand="$1";
-if [ -z "$subcommand" ]; then
+cmd="$1";
+if [ -z "$cmd" ]; then
   log error "No command provided"
   exit 1
 fi
 shift
 
-case $subcommand in
-  conversations|providers)
-    check_db_health
-    "$SH41_BIN_SUBCOMMANDS/$subcommand" "$@" < /dev/stdin
+case $cmd in
+  # App
+  conversations)
+    export LOG_NAMESPACE="󰡠 conversations"
+    run_app_cmd "$cmd" "$@"
   ;;
+  messages)
+    export LOG_NAMESPACE="󰆈 messages"
+    run_app_cmd "$cmd" "$@"
+  ;;
+  providers)
+    export LOG_NAMESPACE=" providers"
+    export SH41_PROVIDERS_BACKENDS="$SH41_LIB/providers/backends"
+    run_app_cmd "$cmd" "$@"
+  ;;
+  users)
+    export LOG_NAMESPACE=" users"
+    run_app_cmd "$cmd" "$@"
+  ;;
+  agents)
+    export LOG_NAMESPACE="󱚥 agents"
+    run_app_cmd "$cmd" "$@"
+  ;;
+
+  # System
   init)
-    "$SH41_BIN_SUBCOMMANDS"/config init "$@" < /dev/stdin
-    "$SH41_BIN_SUBCOMMANDS"/db init "$@" < /dev/stdin
+    run_system_cmd init "$@"
+    run_db_cmd init "$@"
   ;;
-  config) "$SH41_BIN_SUBCOMMANDS"/config "$@" < /dev/stdin ;;
-  db) "$SH41_BIN_SUBCOMMANDS"/db "$@" < /dev/stdin ;;
+  test)
+    find "$SH41_LIB" -type f -name '*.test' \
+      | while IFS= read -r test_file; do
+          ( "$test_file" )
+        done
+  ;;
   upgrade)
-    "$SH41_BIN_SUBCOMMANDS"/upgrade "$@" < /dev/stdin
-    "$SH41_BIN_SUBCOMMANDS"/config init "$@" < /dev/stdin
-    "$SH41_BIN_SUBCOMMANDS"/db init "$@" < /dev/stdin
+    run_system_cmd upgrade "$@"
+    run_system_cmd config init
+    run_db_cmd init
+    # run_db_cmd migrate \
+    #   --files "$SH41_LIB/*/$SH41_DB_TYPE/migrations/*"
   ;;
-  *) log error -v cmd "$subcommand" "Unknown command"; exit 1 ;;
+  system) run_system_cmd "$@" ;;
+  db) run_db_cmd "$@" ;;
+  *) log error -v cmd "$cmd" "Unknown command"; exit 1 ;;
 esac

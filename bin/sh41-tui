@@ -12,16 +12,18 @@
 #  SH41_LIB
 #   Path to SH41 internal lib directory.
 
-internal_scripts_home="$SH41_LIB/_scripts"
+if [ -z "$SH41_LIB" ]; then
+  log error -v var_name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
+
+internal_scripts_home="$SH41_LIB/_core/scripts"
 utility="$1"; shift
 
 case "$utility" in
   log|confirm|choose)
     "$internal_scripts_home/$utility" "$@" < /dev/stdin
   ;;
-  *)
-    echo "sh41-tui: Unknown utility $utility" >&2
-    exit 1
-  ;;
+  *) log error -v utility "$utility" "Unknown utility"; exit 1 ;;
 esac
 
