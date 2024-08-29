@@ -1,0 +1,86 @@
+#!/usr/bin/env sh
+
+# NAME
+#  db-exists - Check if a record exists in a table
+#
+# SYNOPSIS
+#  db-exists <table_name> 
+#   -w|--where <where_clause>
+#
+# DESCRIPTION
+#  Check if a record exists in a table by providing a sqlite WHERE clause.
+#
+# OPTIONS
+#  -w, --where <where_clause>
+#   The sqlite WHERE clause to use when querying the database.
+#
+# ERROR CODES
+#  1: Missing environment variable
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#  3: No items found in table with WHERE clause
+#
+# ENVIRONMENT
+#  SH41_DB_CONNECTION
+#   Path to the database file. 
+#
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+# EXAMPLES
+#  db-exists users -w "id=1"
+#
+# SEE ALSO
+#  sqlite3(1)
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_DB_CONNECTION" ]; then
+  log error -v var_name "\$SH41_DB_CONNECTION" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+export LOG_NAMESPACE=" ssorm.exists"
+
+# shellcheck source=../../../../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+
+# ╭───┤ Input validation 
+# ╰─
+
+guard_missing_argument "<table>" "$1"
+table="$1"; shift
+
+if ! db-tables "$table" exists; then
+  log error -v table "$table" "Table does not exist"
+  exit 2
+fi
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -w|--where) 
+      guard_missing_option_value "-w|--where" "$2"
+      where=$2; shift
+    ;;
+    --) shift; break ;;
+    -?*) log error -v name "$1" "Unknown parameter"; exit 2 ;;
+    *) break ;;
+  esac
+  shift
+done
+
+guard_missing_option "-w|--where" "$where"
+
+# ╭───┤ Main
+# ╰─
+
+count=$(sqlite3 "$SH41_DB_CONNECTION" \
+  "SELECT COUNT(*) FROM $table WHERE $where;")
+
+if [ "$count" -eq 0 ]; then
+  log info -v table "$table" -v where "$where" "No items found in table"
+  exit 3
+fi

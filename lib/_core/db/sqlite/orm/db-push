@@ -1,0 +1,65 @@
+#!/usr/bin/env sh
+
+# SYNOPSIS
+#  push <table_name> [...fields passed on to db-build]
+#
+# DESCRIPTION
+#  Build and push a new object to an existing JSON array.
+#
+# ARGUMENTS
+#  <table_name>
+#   The name of the table representing the item(s) the array contains.
+#
+# EXAMPLES:
+#  while IFS= read -r file; do
+#    git --no-pager diff --cached "$file" > "$commit_changes_tmp"
+#    result=$(printf "%s" "$result" \
+#      | sh41 messages push \
+#        --field-from-file content "$commit_changes_tmp" \
+#        --field role "user")
+#  done < "$commit_affected_files"
+#
+# ERROR CODES
+#  1: Missing environment variable
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#
+# ENVIRONMENT
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+
+if [ -z "$SH41_LIB" ]; then
+  log error -v name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+set -e
+export LOG_NAMESPACE=" ssorm.push"
+
+# shellcheck source=../../../../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../../../../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+# shellcheck source=../../../../_core/fn/stdin-or
+. "$SH41_LIB/_core/fn/stdin-or"
+
+# ╭───┤ Input validation 
+# ╰─
+
+guard_missing_argument "<table>" "$1"
+table="$1"; shift
+
+# ╭───┤ Main
+# ╰─
+
+array_json=$(cat -)
+new_item_tmp=$(mktemp -t "ssorm.push.XXXXXX")
+db-build "$table" "$@" > "$new_item_tmp"
+
+printf "%s" "$array_json" \
+  | jq --compact-output --slurpfile new_item "$new_item_tmp" \
+    '. + $new_item[]'
+
+rm "$new_item_tmp"

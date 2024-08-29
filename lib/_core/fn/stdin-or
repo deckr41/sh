@@ -4,22 +4,21 @@
 if [ -z "$IS_STDINOR_SOURCED" ]; then
   IS_STDINOR_SOURCED=1
 else
-  echo "stdin_or function in $0 is already sourced. Skipping..." >&2
+  echo "File 'stdin-or' already sourced, skipping..." >&2
   exit 0
 fi
 
 # NAME
-#  stdin_or - Function to read from stdin or use passed arguments as fallback
+#  stdin_or - Function to read from stdin or use arguments as fallback
 #
 # SYNOPSIS
-#  stdin_or [ARGUMENTS]...
+#  stdin_or [...default_values]
 #
 # DESCRIPTION
-#  This function reads from the standard input (stdin) and outputs it as is. 
-#  However, if there is no input (i.e., if the script is run interactively or 
-#  not receiving input from a pipeline), it will instead return the arguments 
-#  passed to the function. This allows for a default behavior in scripts where 
-#  the presence of input data can change the flow of execution.
+#  Read from the standard input (stdin) and output it as is. 
+#  However, if there is no input (i.e., if the script is run interactively or
+#  not receiving input from a pipeline), it will instead return the first 
+#  argument passed to the function.
 #
 # EXAMPLES
 #  stdin_data=$(echo "input data" | stdin_or "default value")
@@ -33,7 +32,7 @@ fi
 stdin_or() {
   # If stdin is a terminal, return the arguments
   if [ -t 0 ]; then 
-    printf "%s" "$@"
+    printf "%s" "$1"
     return 0
   fi
 
@@ -42,7 +41,7 @@ stdin_or() {
 
   # If there is no input, also return the arguments
   if [ -z "$input" ]; then
-    printf "%s" "$@"
+    printf "%s" "$1"
   else
     printf "%s" "$input"
   fi

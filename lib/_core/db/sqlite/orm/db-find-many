@@ -1,0 +1,251 @@
+#!/usr/bin/env sh
+
+# NAME 
+#  db-find-many - Find multiple records in a table
+#
+# SYNOPSIS
+#  db-find-many <table_name>
+#   [-sl|--select <select_filter_clause>]
+#   [-w|--where <where_clause>] 
+#   [-i|--include <related_tables>]
+#   [-s|--sort <sort_clause>]
+#   [-m|--mode <mode="csv">]
+#   [-l|--limit <limit_clause>]
+#   [-o|--offset <offset_clause>]
+#
+# DESCRIPTION
+#  Find many records in a table by providing a sqlite WHERE clause. 
+#
+#  By default only the "id" field is returned, use "-sl|--select" to specify
+#  which fields to return.
+#
+#  If no WHERE clause is provided, all records are returned. 
+# 
+# ARGUMENTS
+#  <table_name>
+#   The table to query.
+#
+# OPTIONS
+#  -sl|--select [select_filter_clause="id"]
+#   The filter clause to use when querying the database.
+#
+#  -w|--where [where_clause]
+#   The WHERE clause to use when querying the database.
+#
+#  -i|--include [related_tables]
+#   A comma separated list of related tables to include in the query.
+#   All fields from the related tables will be included in the result.
+#
+#  -s|--sort [sort_clause="id ASC"]
+#   The sort clause to use when querying the database.
+#
+#  -m|--mode [mode="csv"] 
+#   The display mode
+#
+#  -l|--limit [limit_clause]
+#   The number of records to return.
+#
+#  -o|--offset [offset_clause]
+#   The number of records to skip.
+#
+# ENVIRONMENT
+#  SH41_DB_CONNECTION
+#   Path to the database file. 
+#
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+# EXAMPLES
+#  db-find-many users
+#   Find all users and return their id field. 
+#
+#  db-find-many users --where "type = 'admin'" --select "id, name"
+#   Find all users where type is admin and only return the id and name fields.
+#
+#  db-find-many users --include "Posts,Comments"
+#   Find all users and include all posts and comments for each user.
+#
+# ERROR CODES
+#  1: Missing environment variable
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#
+# SEE ALSO
+#  sqlite3(1), jq(1)
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_DB_CONNECTION" ]; then
+  log error -v var_name "\$SH41_DB_CONNECTION" "Missing environment variable"
+  exit 1
+fi
+
+if [ -z "$SH41_LIB" ]; then
+  log error -v name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+set -e
+export LOG_NAMESPACE=" ssorm.find-many"
+
+# shellcheck source=../../../../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../../../../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+
+# ╭───┤ Functions
+# ╰─
+
+# 1:1 or N:1 relationships
+attach_direct_relationships() {
+  related_table="$1"
+  related_table_lower="$2"
+
+  # Fetch all related items in one query, for all main items to reduce the 
+  # impact of N+1 queries
+  related_items=$(sqlite3 --json "$SH41_DB_CONNECTION" \
+    "SELECT * FROM $related_table WHERE id IN ( \
+      SELECT ${related_table_lower}_id FROM $main_table_lower WHERE id IN ($main_items_ids) \
+    )"
+  )
+
+  # Attach related items, only those matching the ids from the main items
+  MAIN_ITEMS=$(jq --null-input \
+    --argjson main_items "$MAIN_ITEMS" \
+    --argjson related_items "$related_items" \
+    '$main_items | map((. as $item | . + { 
+      '"$related_table"': (
+        $related_items | map(select(.id == $item.'"${related_table_lower}_id"')) | .[0]
+      ) 
+    }))'
+  )
+}
+
+# 1:N relationships
+attach_inverse_relationships() {
+  related_table="$1"
+  related_table_lower="$2"
+
+  # Fetch all related items in one query, for all main items to reduce the 
+  # impact of N+1 queries
+  related_items=$(sqlite3 --json "$SH41_DB_CONNECTION" \
+    "SELECT * FROM $related_table_lower WHERE ${MAIN_TABLE}_id IN ($main_items_ids)"
+  )
+
+  # Attach related items, only those matching the ids from the main items
+  MAIN_ITEMS=$(jq --null-input \
+    --argjson main_items "$MAIN_ITEMS" \
+    --argjson related_items "$related_items" \
+    '$main_items | map((. as $item | . + { 
+      '"$related_table"': (
+        $related_items | map(select(.'"${main_table_lower}_id"' == $item.id))
+      ) 
+    }))'
+  )
+}
+
+attach_related_models() {
+  main_items_ids=$(printf "%s" "$MAIN_ITEMS" | jq '.[].id' | tr '\n' ',' | sed 's/,$//')
+  main_table_lower=$(printf "%s" "$MAIN_TABLE" | tr '[:upper:]' '[:lower:]')
+
+  # For each related table, query the database and add the related items to the 
+  # main items using the related table name as the key.
+  for related_table in $(echo "$RELATED_TABLES" | tr ',' '\n'); do
+    related_table_lower=$(echo "$related_table" | tr '[:upper:]' '[:lower:]')
+    # 1:1 or N:1
+    # For ex. if querying `Messages` and including `Users`, 
+    # check for `Messages.user_id` 
+    if db-table "$MAIN_TABLE" has-field "${related_table_lower}_id" 2> /dev/null; then
+      attach_direct_relationships "$related_table" "$related_table_lower"
+    fi
+
+    # 1:N
+    # For ex. if querying `Users` and including `Messages`,
+    # check for `Messages.users_id`
+    if db-table "$related_table" has-field "${main_table_lower}_id" 2> /dev/null; then
+      attach_inverse_relationships "$related_table" "$related_table_lower"
+    fi
+  done
+}
+
+# ╭───┤ Input validation
+# ╰─
+
+guard_missing_argument "<table>" "$1"
+MAIN_TABLE="$1"; shift
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -sl|--select)
+      guard_missing_option_value "-sl|--select" "$2"
+      select_filter=$2; shift
+    ;;
+    -w|--where)
+      guard_missing_option_value "-w|--where" "$2"
+      where=$2; shift
+    ;;
+    -i|--include)
+      guard_missing_option_value "-i|--include" "$2"
+      RELATED_TABLES=$2; shift
+    ;;
+    -s|--sort)
+      guard_missing_option_value "-s|--sort" "$2"
+      sort=$2; shift
+    ;;
+    -m|--mode)
+      guard_missing_option_value "-m|--mode" "$2"
+      mode=$2; shift
+    ;;
+    -l|--limit)
+      guard_missing_option_value "-l|--limit" "$2"
+      limit=$2; shift
+    ;;
+    -o|--offset)
+      guard_missing_option_value "-o|--offset" "$2"
+      offset=$2; shift
+    ;;
+    --) shift; break ;;
+    -?*) log error -v name "$1" "Unknown parameter"; exit 2 ;;
+    *) break ;;
+  esac
+  shift
+done
+
+if [ -n "$RELATED_TABLES" ] && [ "$mode" = "box" ]; then
+  log error -v mode "box" \
+    "Mode is not supported when also including related tables using -i|--include"
+  exit 2
+fi
+
+# ╭───┤ Main
+# ╰─
+
+query="SELECT ${select_filter:-id} FROM $MAIN_TABLE"
+
+if [ -n "$where" ]; then
+  query="$query WHERE $where"
+fi
+
+if [ -n "$sort" ]; then
+  query="$query ORDER BY $sort"
+fi
+
+if [ -n "$limit" ]; then
+  query="$query LIMIT $limit"
+fi
+
+if [ -n "$offset" ]; then
+  query="$query OFFSET $offset"
+fi
+
+MAIN_ITEMS=$(sqlite3 "$SH41_DB_CONNECTION" "-${mode:-csv}" "$query")
+
+if [ -n "$RELATED_TABLES" ]; then
+  attach_related_models
+fi
+
+printf "%s\n" "$MAIN_ITEMS"
+

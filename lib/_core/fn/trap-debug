@@ -4,7 +4,7 @@
 if [ -z "$IS_TRAP_DEBUG_SOURCED" ]; then
   IS_TRAP_DEBUG_SOURCED=1
 else
-  echo "$0 is already sourced. Skipping..." >&2
+  echo "File 'trap-debug' already sourced, skipping..." >&2
   return 0
 fi
 
@@ -54,8 +54,7 @@ EOF
 }
 
 trap_debug() {
-  exit_code=$?; 
-
+  exit_code=$?
   if [ $exit_code -ne 0 ]; then
     trap_trace "$exit_code" >&2
   fi

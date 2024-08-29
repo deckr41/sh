@@ -1,0 +1,107 @@
+#!/usr/bin/env sh
+
+TEST_INDEX="0"
+SUC_COUNT="0"
+ERR_COUNT="0"
+
+# NAME
+#  run_test - Function for running a test using the given/when/then pattern.
+#
+# SYNOPSIS
+#  run_test
+#   --cmd <command>
+#   --expect-stdin <expected_stdin>
+#   --expect-stderr <expected_stderr>
+#   --expect-exit <expected_exit>
+#   --given <given>
+#   --when <when>
+#   --then <then>
+run_test() {
+  TEST_INDEX=$((TEST_INDEX + 1))
+
+  expected_stdin=""
+  expected_stderr=""
+  expected_exit="0"
+
+  while [ "$#" -gt 0 ]; do
+    case $1 in
+      --given) given="$2"; shift ;;
+      --when) when="$2"; shift ;;
+      --then) then="$2"; shift ;;
+      --expect-stdin) expected_stdin="$2"; shift ;;
+      --expect-stderr) expected_stderr="$2"; shift ;;
+      --expect-exit) expected_exit="$2"; shift ;;
+      --cmd) cmd="$2"; shift ;;
+      *) fancy-log error -v option "$1" "Unknown option"; exit 1 ;;
+    esac
+    shift
+  done
+
+  actual_stdin_tmp_file=$(mktemp -t "#${TEST_INDEX}-actual-stdin.XXXXXX") 
+  actual_stderr_tmp_file=$(mktemp -t "#${TEST_INDEX}-actual-stderr.XXXXXX") 
+  eval "$cmd" > "$actual_stdin_tmp_file" 2> "$actual_stderr_tmp_file"
+  actual_stdin_hash=$(sha256sum "$actual_stdin_tmp_file" | cut -d ' ' -f 1)
+  actual_stderr_hash=$(sha256sum "$actual_stderr_tmp_file" | cut -d ' ' -f 1)
+  actual_exit="$?"
+
+  expected_stdin_tmp_file=$(mktemp -t "#${TEST_INDEX}-expected-stdin.XXXXXX")
+  expected_stderr_tmp_file=$(mktemp -t "#${TEST_INDEX}-expected-stderr.XXXXXX")
+  printf "%s" "$expected_stdin" > "$expected_stdin_tmp_file"
+  printf "%s" "$expected_stderr" > "$expected_stderr_tmp_file"
+  expected_stdin_hash=$(sha256sum "$expected_stdin_tmp_file" | cut -d ' ' -f 1)
+  expected_stderr_hash=$(sha256sum "$expected_stderr_tmp_file" | cut -d ' ' -f 1)
+
+  if [ "$expected_stdin_hash" = "$actual_stdin_hash" ] && \
+     [ "$expected_stderr_hash" = "$actual_stderr_hash" ] && \
+     [ "$expected_exit" -eq "$actual_exit" ]; then
+    SUC_COUNT=$((SUC_COUNT + 1))
+    fancy-log success \
+      -v given "$given" ${when:+-v when "$when"} -v 'then' "$then" \
+      "#${TEST_INDEX}"
+  else
+    ERR_COUNT=$((ERR_COUNT + 1))
+    fancy-log error \
+      -v given "$given" ${when:+-v when "$when"} -v 'then' "$then" \
+      "#${TEST_INDEX}"
+
+    if [ "$expected_exit" -ne "$actual_exit" ]; then
+      fancy-log error \
+        -v expected_exit "$expected_exit" -v actual_exit "$actual_exit" \
+        "#${TEST_INDEX}"
+    fi
+
+    if [ "$expected_stdin_hash" != "$actual_stdin_hash" ]; then
+      echo "Expected stdin:"
+      cat "$expected_stdin_tmp_file"
+
+      echo "Actual stdin:"
+      cat "$actual_stdin_tmp_file"
+      delta --paging never "$expected_stdin_tmp_file" "$actual_stdin_tmp_file"
+    fi
+
+    if [ "$expected_stderr_hash" != "$actual_stderr_hash" ]; then
+      echo "Expected stderr:"
+      cat "$expected_stderr_tmp_file"
+
+      echo "Actual stderr:"
+      cat "$actual_stderr_tmp_file"
+      
+      delta --paging never "$expected_stderr_tmp_file" "$actual_stderr_tmp_file"
+    fi
+
+    rm "$expected_stdin_tmp_file" "$actual_stdin_tmp_file" \
+       "$expected_stderr_tmp_file" "$actual_stderr_tmp_file"
+  fi
+}
+
+print_test_results() {
+  fancy-log info \
+    -v total_count "$((SUC_COUNT + ERR_COUNT))" \
+    -v error_count "$ERR_COUNT" \
+    -v success_count "$SUC_COUNT" \
+    "Finished all tests"
+
+  if [ "$ERR_COUNT" -gt 0 ]; then
+    exit 1
+  fi
+}

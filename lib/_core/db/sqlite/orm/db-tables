@@ -1,0 +1,213 @@
+#!/usr/bin/env dash
+
+# NAME 
+#  tables - Table level utilities 
+#
+# SYNOPSIS
+#  tables <table_name> <command> [options]
+#
+#  tables <table_name> exists
+#  tables <table_name> pk|primary-key
+#  tables <table_name> describe [options]
+#  tables <table_name> has-field <field>
+#  tables <table_name> field-type <field>
+#
+# DESCRIPTION
+#  Table level utilities.
+#
+# ARGUMENTS
+#  <table_name>
+#   The name of the table to operate on.
+#
+# COMMANDS
+#  exists
+#   Check if a table exists.
+#   Returns 0 if the table exists, 2 if it does not.
+#
+#  pk
+#   Get the field name for the primary key of a table.
+#
+#  describe
+#   Describe a table in markdown format. Fields, types, constraints, triggers,
+#   and indices are displayed for the given table.
+#
+#   ARGUMENTS
+#    -m, --mode [mode=markdown]
+#     The output format. Can be "markdown" or "json".
+#
+#  has-field <field>
+#   Check if a table has a given field.
+#   Returns 0 if the field exists, 3 if it does not.
+#
+#  field-type <field>
+#   Get the type of a field in a table.
+#
+# ERROR CODES
+#  1: Missing environment variable
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#  3 Table does not exist
+#  4 Field does not exist
+#
+# ENVIRONMENT
+#  SH41_DB_CONNECTION
+#   Path to the database file. 
+#
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+# SEE ALSO
+#  sqlite3(1)
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_DB_CONNECTION" ]; then
+  log error -v var_name "\$SH41_DB_CONNECTION" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+export LOG_NAMESPACE=" ssorm.tables"
+
+# shellcheck source=../../../../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../../../../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+
+# ╭───┤ Functions
+# ╰─
+
+# Check if a table exists
+#
+# RETURNS (exit code)
+#  0 if the table exists, 1 otherwise
+does_table_exist() {
+  sqlite3 "$SH41_DB_CONNECTION" \
+    "SELECT name FROM sqlite_master WHERE type='table'" \
+    | grep --quiet --word-regexp "$1"
+}
+
+# Check if a field exists in a table
+#
+# RETURNS (exit code)
+#  0 if the field exists, 1 otherwise
+does_field_exist() {
+  sqlite3 --csv "$SH41_DB_CONNECTION" "PRAGMA table_info($1)" \
+    | cut -d, -f2 \
+    | grep --quiet --word-regexp "$2"
+}
+
+# Get the primary key field name of a table
+#
+# RETURNS (string)
+get_pk_field_name() {
+  sqlite3 -noheader -csv "$SH41_DB_CONNECTION" "PRAGMA table_info($1)" \
+    | awk -F, '$6 == 1 {print $2}'
+}
+
+# Get the type of a field in a table
+#
+# RETURNS (string)
+get_field_type() {
+  table="$1"
+  field="$2"
+
+  describe_table "$table" tabs \
+    | grep "$field" \
+    | awk -F '\t' '{print $3}'
+}
+
+describe_table() {
+  table="$1"
+  mode="${2:-markdown}"
+
+  sqlite3 "--$mode" "$SH41_DB_CONNECTION" \
+    "PRAGMA table_info($table);"
+
+  # indices=$(sqlite3 --markdown "$SH41_DB_CONNECTION" \
+  #   "SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='$1';"
+  # )
+
+  # if [ -n "$indices" ]; then
+  #   echo "\n### Indices\n"
+  #   echo "$indices"
+  # fi
+
+  # triggers=$(sqlite3 --markdown "$SH41_DB_CONNECTION" \
+  #   "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='$1';"
+  # )
+
+  # if [ -n "$triggers" ]; then
+  #   echo "\n### Triggers\n"
+  #   echo "$triggers"
+  # fi
+}
+
+# ╭───┤ Input validation 
+# ╰─
+
+guard_missing_argument "<table>" "$1"
+table="$1"; shift
+
+if ! does_table_exist "$table"; then
+  log error -v name "$table" "Table does not exist"
+  exit 3
+fi
+
+guard_missing_argument "<command>" "$1"
+cmd="$1"; shift
+
+# ╭───┤ Main
+# ╰─
+
+
+case "$cmd" in
+  exists) 
+    # noop, already checked before
+  ;;
+  pk|primary-key)
+    get_pk_field_name "$table"
+  ;;
+  describe)
+    while [ "$#" -gt 0 ]; do
+      case $1 in
+        -m|--mode)
+          guard_missing_option_value "-m|--mode" "$2"
+          mode=$2; shift
+        ;;
+        --) shift; break ;;
+        -?*) log error -v name "$1" "Unknown parameter"; exit 2 ;;
+        *) break ;;
+      esac
+      shift
+    done
+
+    describe_table "$table" "$mode"
+  ;;
+  has-field)
+    guard_missing_argument "<field>" "$1" 
+    field="$1"
+
+    if ! does_field_exist "$table" "$field"; then
+      log error -v field "$field" -v table "$table" \
+        "Field does not exist in table"
+      exit 4
+    fi
+  ;;
+  field-type)
+    guard_missing_argument "<field>" "$1"
+    field="$1"
+
+    if ! does_field_exist "$table" "$field"; then
+      log error -v field "$field" -v table "$table" \
+        "Field does not exist in table"
+      exit 4
+    fi
+    
+    get_field_type "$table" "$field"
+  ;;
+  *) guard_unknown_parameter "$1" ;;
+esac
+

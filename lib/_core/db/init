@@ -1,0 +1,261 @@
+#!/usr/bin/env sh
+
+# SYNOPSIS
+#  init [-s|--schemas <schema_glob>] [-hc|--health-check]
+#
+# OPTIONS
+#  [-s|--schemas <schema_glob>]
+#   Path to schema files to be loaded into the database.
+#   Use default shell globbing to match multiple files.
+#
+# FLAGS
+#  [-hc|--health-check]   
+#   Only check if the database connection is working, dont create or initialize 
+#   anything.
+#   Throws an error if used with --hard-reset.
+#
+#  [-hr|--hard-reset]
+#   Create a backup of the current database file and start fresh, allowing the 
+#   creation and seeding of the database.
+#   Throws an error if used with --health-check.
+#
+# ENVIRONMENT
+#  SH41_DB
+#   The full database configuration string:
+#   - URI template: <db_type>://<connection_string>
+#   - <db_type>: `sqlite` and `postgres`
+#   - <connection_string>: where and how to connect, specific to <db_type>
+#
+#  SH41_DB_TYPE
+#   Type of database to use. Possible values: `sqlite`, `postgres`.
+#  
+#  SH41_DB_CONNECTION
+#   Connection string for the database, depending on the `db_type`.
+# 
+#  SH41_DB_BACKUPS
+#   Directory where database backups are stored.
+#
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+# ERRORS
+#  1: Missing environment variable
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#  3: Cannot create backup of DB file
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_LIB" ]; then
+  log error -v name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+set -e
+export LOG_NAMESPACE="$LOG_NAMESPACE.init"
+
+# shellcheck source=../fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+
+# ╭───┤ Functions
+# ╰─
+
+check_sqlite() {
+  if [ ! -e "$SH41_DB_CONNECTION" ]; then
+    log error \
+      -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
+      "DB file does not exist"
+    return 2
+  fi
+
+  for system_table in $SYSTEM_TABLES; do
+    if ! db-tables "$system_table" exists > /dev/null 2>&1; then
+      log error \
+        -v "table_name" "$system_table" \
+        "DB file exists but system table is missing"
+      return 2
+    fi
+  done
+
+  log success \
+    -v tables "$(echo "$SYSTEM_TABLES" | tr ' ' ',')" \
+    -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
+    "DB file exists and system tables are present"
+}
+
+configure_sqlite() {
+  mkdir -p "$(dirname "$SH41_DB_CONNECTION")"
+  touch "$SH41_DB_CONNECTION"
+
+  if [ ! -e "$SH41_DB_CONNECTION" ]; then
+    log error -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
+      "Create DB file"
+    return 2
+  fi
+
+  for system_table in $SYSTEM_TABLES; do
+    if db-tables "$system_table" exists > /dev/null 2>&1; then
+      log info -v "name" "$system_table" "System table exists"
+    else
+      if ! sqlite3 "$SH41_DB_CONNECTION" < "$SH41_DB_HOME/sqlite/schemas/$system_table.sql"; then
+        log error -v "name" "$system_table" "Create system table"
+        return 2
+      fi
+
+      log success -v "name" "$system_table" "Create system table"
+    fi
+  done
+}
+
+backup_and_reset_sqlite() {
+  mkdir -p "$SH41_DB_BACKUPS"
+  backup_file="$SH41_DB_BACKUPS/$(date --utc --iso-8601="seconds")_$(basename "$SH41_DB_CONNECTION")"
+
+  if ! mv "$SH41_DB_CONNECTION" "$backup_file"; then
+    log error \
+      -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
+      -v "backup_file" "$backup_file" \
+      "Could not create backup of DB file"
+    exit 3
+  fi
+
+  log info \
+    -v "\$SH41_DB_CONNECTION" "$SH41_DB_CONNECTION" \
+    -v "backup_file" "$backup_file" \
+    "Create backup of current DB file and start fresh"
+}
+
+init_app_sqlite(){
+  has_app_errors=""
+
+  # First create all database tables
+  for schema_file in $APP_SCHEMA_FILES; do
+    relative_path=$(echo "$schema_file" | sed "s|$SH41_LIB/|lib/|")
+
+    if ! sqlite3 "$SH41_DB_CONNECTION" < "$schema_file"; then
+      log error -v "file" "$relative_path" "Load schema"
+      has_app_errors="true"
+    else
+      log success -v "file" "$relative_path" "Load schema"
+    fi
+  done
+
+  # Then seed the database when we're sure all tables and relationships 
+  # are in place
+  for schema_file in $APP_SCHEMA_FILES; do
+    seed_file="$(dirname "$schema_file")/seed"
+    if [ -x "$seed_file" ]; then 
+      if ! "$seed_file"; then
+        log error -v file "$seed_file" "Seed table"
+        has_app_errors="true"
+      else
+        log success -v file "$seed_file" "Seed table"
+      fi
+    fi
+  done
+
+  if [ -n "$has_app_errors" ]; then
+    return 1
+  fi
+}
+
+check_postgres() {
+  log error "Postgres support is not implemented yet"
+  return 2
+}
+
+configure_postgres() {
+  log error "Postgres support is not implemented yet"
+  exit 2
+}
+
+# ╭───┤ Input validation
+# ╰─
+
+SHOULD_HEALTH_CHECK=""
+SHOULD_HARD_RESET=""
+SYSTEM_TABLES="_migrations _settings"
+APP_SCHEMA_FILES=""
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -hr|--hard-reset)
+      if [ "$SHOULD_HEALTH_CHECK" = "yes" ]; then
+        log error -v option "-hr|--hard-reset" "Cannot use with --health-check"
+        exit 2
+      fi
+
+      SHOULD_HARD_RESET="yes"
+    ;;
+    -hc|--health-check)
+      if [ "$SHOULD_HARD_RESET" = "yes" ]; then
+        log error -v option "-hc|--health-check" "Cannot use with --hard-reset"
+        exit 2
+      fi
+
+      SHOULD_HEALTH_CHECK="yes" 
+      export LOG_NAMESPACE="$LOG_NAMESPACE (health check)"
+    ;;
+    -s|--schemas)
+      guard_missing_option_value "-s|--schemas" "$2"
+
+      # Intentinally not quoting $2 to allow native shell globbing expansion
+      # shellcheck disable=SC2086,SC2116
+      files=$(echo $2); shift
+
+      if [ -n "$APP_SCHEMA_FILES" ]; then
+        APP_SCHEMA_FILES="$APP_SCHEMA_FILES $files"
+      else
+        APP_SCHEMA_FILES="$files"
+      fi
+    ;;
+    --) shift; break ;;
+    -?*) guard_unknown_parameter "$1" ;;
+    *) break ;;
+  esac
+  shift
+done
+
+# ╭───┤ Main
+# ╰─
+
+if [ "$SH41_DB_TYPE" != "sqlite" ] && [ "$SH41_DB_TYPE" != "postgres" ]; then
+  log error \
+    -v "\$SH41_DB_TYPE" "$SH41_DB_TYPE" \
+    -v supported_type "sqlite, postgres" \
+    -v "\$SH41_CONFIG_RC" "$SH41_CONFIG_RC" \
+    "Invalid type, update \$SH41_DB variable in \$SH41_CONFIG_RC file"
+  exit 3
+fi
+
+log success \
+  -v "\$SH41_DB_TYPE" "$SH41_DB_TYPE" \
+  -v "\$SH41_DB" "$SH41_DB" \
+  "DB type configured"
+
+SH41_ORM_HOME="$SH41_LIB/_core/db/$SH41_DB_TYPE/orm"
+export PATH="$SH41_ORM_HOME:$PATH"
+
+if [ "$SH41_DB_TYPE" = "sqlite" ]; then
+  if [ "$SHOULD_HARD_RESET" = "yes" ]; then
+    backup_and_reset_sqlite
+  fi
+
+  if ! check_sqlite; then
+    [ -z "$SHOULD_HEALTH_CHECK" ] && configure_sqlite || exit 2
+  fi
+
+  if [ -z "$SHOULD_HEALTH_CHECK" ]; then
+    init_app_sqlite
+  fi
+fi
+
+if [ "$SH41_DB_TYPE" = "postgres" ] && ! check_postgres; then
+  [ -z "$SHOULD_HEALTH_CHECK" ] &&  configure_postgres || exit 2
+fi
+

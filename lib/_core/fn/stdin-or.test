@@ -1,0 +1,120 @@
+#!/usr/bin/env sh
+
+# ╭───┤ Testing "stdin_or" function
+# │ Keep in mind that the tests are run in the same shebang AND the same 
+# │ context as this file. This means that the functions and variables defined 
+# │ in THIS file will be available in the COMMANDS YOU ARE TESTING and could 
+# │ potentially collide with env vars they might use/need.
+# ╰─
+
+export LOG_NAMESPACE="󰙨 stdin_or"
+
+# shellcheck source=./test-runner
+. "$SH41_LIB/_core/fn/test-runner"
+
+# shellcheck source=./stdin-or
+. "$(dirname "$0")/$(basename "$0" .test)"
+
+# ╭───┤ WITHOUT stdin
+# ╰─
+
+case1() { 
+  stdin_or
+}
+
+run_test \
+  --cmd "case1" \
+  --expect-stdin "" \
+  --given "No stdin" \
+  --when "Call with no args" \
+  --then "Return an empty string" \
+
+case2() { 
+  stdin_or "default value"
+}
+
+run_test \
+  --cmd "case2" \
+  --expect-stdin "default value" \
+  --given "No stdin" \
+  --when "Call with default value" \
+  --then "Return default value"
+
+case3() {
+  stdin_or "default value 1
+default value 2"
+}
+
+run_test \
+  --cmd "case3" \
+  --expect-stdin "default value 1
+default value 2" \
+  --given "No stdin" \
+  --when "Call with multiline default value" \
+  --then "Return multiline default value"
+
+# ╭───┤ WITH stdin
+# ╰─
+
+case4() {
+  printf "input data" | stdin_or
+}
+
+run_test \
+  --cmd "case4" \
+  --expect-stdin "input data" \
+  --given "String piped in stdin" \
+  --when "Call with no args" \
+  --then "Return stdin data"
+
+case5() {
+  printf "input data" | stdin_or "default value"
+}
+
+run_test \
+  --cmd "case5" \
+  --expect-stdin "input data" \
+  --given "String piped in stdin" \
+  --when "Call with default value" \
+  --then "Return stdin data"
+
+case6() {
+  printf "" | stdin_or "default value"
+}
+
+run_test \
+  --cmd "case6" \
+  --expect-stdin "default value" \
+  --given "Empty string piped in stdin" \
+  --when "Call with default value" \
+  --then "Return default value"
+
+case7(){
+ printf "input line 1\ninput line 2" \
+   | stdin_or 
+}
+
+run_test \
+  --cmd "case7" \
+  --expect-stdin "input line 1
+input line 2" \
+  --given "Multiline string piped in stdin" \
+  --when "Call with no args" \
+  --then "Return multiline stdin input"
+
+case8() {
+  printf "input line 1\ninput line 2" \
+    | stdin_or "default value 1
+default value 2"
+}
+
+run_test \
+  --cmd "case8" \
+  --expect-stdin "input line 1
+input line 2" \
+  --given "Multiline string piped in stdin" \
+  --when "Call with multiline default value" \
+  --then "Return multiline stdin input"
+
+print_test_results
+

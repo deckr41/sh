@@ -1,0 +1,79 @@
+#!/usr/bin/env sh
+
+# SYNOPSIS
+#  basic <must_have> [-l|--lorem <lorem_value>]
+#
+# DESCRIPTION
+#
+# ARGUMENTS
+#  <must_have>
+#   A required argument
+#
+# OPTIONS
+#  -l|--lorem <lorem_value>
+#   Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer
+#   nec odio.
+#
+# ERROR CODES
+#  1: Missing environment variables
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#  
+# SEE ALSO
+#  sqlite3(1), jq(1)
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_LIB" ]; then
+  log error -v var_name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+set -e
+export LOG_NAMESPACE="$LOG_NAMESPACE.basic"
+
+# shellcheck source=../../../../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../../../../_core/fn/stdin-or
+. "$SH41_LIB/_core/fn/stdin-or"
+# shellcheck source=../../../../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+
+# ╭───┤ Functions
+# ╰─
+
+# ╭───┤ Argument parsing
+# ╰─
+
+guard_missing_argument "<must-have>" "$1"
+must_have="$1"; shift
+
+stdin_data=$(stdin_or "")
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -l|--lorem)
+      guard_missing_option_value "-l|--lorem" "$2"
+      lorem=$2; shift
+
+      if [ "$lorem" = "@-" ]; then
+        lorem=$stdin_data
+      fi
+    ;;
+    --) shift; break ;;
+    -?*) guard_unknown_parameter "$1" ;;
+    *) break ;;
+  esac
+  shift
+done
+
+guard_missing_option "-l|--lorem" "$lorem"
+
+# ╭───┤ Main
+# ╰─
+
+echo "Hello, world!"
+echo "$must_have"
+

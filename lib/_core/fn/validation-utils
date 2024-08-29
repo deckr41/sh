@@ -1,0 +1,51 @@
+#!/usr/bin/env sh
+
+# Guard against multiple/circular sourcing
+if [ -z "$IS_VALIDATION_UTILS_SOURCED" ]; then
+  IS_VALIDATION_UTILS_SOURCED=1
+else
+  echo "File 'validation-utils' already sourced, skipping..." >&2
+  exit 0
+fi
+
+guard_missing_option_key() {
+  if [ -z "$2" ]; then
+    log error -v option "$1" "Missing key"
+    exit 2
+  fi
+}
+
+guard_missing_option_value() {
+  if [ -z "$2" ]; then
+    log error -v option "$1" "Missing value"
+    exit 2
+  fi
+}
+
+guard_missing_option_stdin() {
+  if [ -z "$2" ]; then
+    log error -v option "$1" "Option value set to '@-' but stdin is empty"
+    exit 2
+  fi
+}
+
+guard_missing_argument() {
+  if [ -z "$2" ]; then
+    log error -v name "$1" "Missing argument"
+    exit 2
+  fi
+}
+
+guard_missing_option() {
+  if [ -z "$2" ]; then
+    log error -v name "$1" "Missing option"
+    exit 2
+  fi
+}
+
+guard_unknown_parameter() {
+  if [ -n "$q" ]; then
+    log error -v name "$1" "Unknown parameter"
+    exit 2
+  fi
+}

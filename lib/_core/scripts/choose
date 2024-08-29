@@ -1,0 +1,100 @@
+#!/usr/bin/env sh
+
+# NAME
+#  choose - Fancy fzf select box 
+#
+# SYNOPSIS
+#  choose 
+#   [-p|--prompt <string>] 
+#   [-h|--height <number>]
+#   [--allow-custom]
+#
+# STDIN
+#  Options to select from, each on a new line.
+#
+# OPTIONS
+#  -p|--prompt <string> 
+#   Prompt to display before the options, default: "Select an option:"
+#
+#  -h|--height <number>
+#   Number of lines fzf selector should take up
+#
+# FLAGS
+#  -ac|--allow-custom
+#   Allow the user to input a custom text instead or selecting a predefined option.
+#
+#  -am|--allow-multiple
+#   Allow the user to select multiple options
+#
+# EXAMPLES
+#  find . -type f | choose -p "Select a file:" -h 20
+#
+# SEE ALSO
+#  fzf(1), log(1)
+
+export LOG_NAMESPACE=" choose"
+
+# ╭───┤ Parse options
+# ╰─
+
+prompt="Select an option:"
+height="6"
+allow_custom=""
+allow_multiple=""
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -ac|--allow-custom) allow_custom="true" ;;
+    -am|--allow-multiple) allow_multiple="true" ;;
+    -h|--height)
+      if [ "$2" ]; then
+        height="$2"; shift 
+      else
+        fancy-log error -v option "-h|--height" "Option requires a value"
+        exit 1
+      fi
+    ;;
+    -p|--prompt) 
+      if [ "$2" ]; then
+        prompt="$2"; shift 
+      else
+        fancy-log error -v option "-p|--prompt" "Option requires a value"
+        exit 1
+      fi
+    ;;
+    --) shift; break ;;
+    -*) fancy-log error -v name "$1" "Unknown parameter"; exit 1 ;;
+    *) break ;;
+  esac
+  shift
+done
+
+if [ -t 0 ]; then
+  fancy-log error "No options provided. Options must be passed via stdin."
+  exit 1
+fi
+
+# ╭───┤ Main
+# ╰─
+
+cat \
+  | fzf \
+    --reverse --ansi \
+    --height "$height" \
+    --prompt "$prompt" \
+    ${allow_multiple:+--multi} \
+    ${allow_custom:+--print-query} \
+  | { 
+      selected=$(cat)
+      count=$(echo "$selected" | wc --lines)
+
+      if [ -n "$allow_custom" ] && [ "$count" -gt 1 ]; then
+        echo "$selected" | sed '1d'
+      else
+        echo "$selected"
+      fi
+
+      if [ -z "$selected" ]; then
+        exit 1
+      fi
+    }

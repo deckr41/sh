@@ -1,0 +1,342 @@
+#!/usr/bin/env sh
+
+# SYNOPSIS
+#  build <table_name> 
+#   [-jd|--json-data <json_data=[{}]>]
+#   [-f|--field <field_name[:index]> <field_value>]
+#   [-v|--var <var_name:field_name[:index]> <var_value>]
+# 
+# DESCRIPTION
+#  Create a JSON array of objects representing table records.
+#
+# ARGUMENTS
+#  <table_name>
+#   The name of the table to insert the record(s) into.
+#
+# OPTIONS
+#  [-jd|--json-data <json_data=[{}]>]
+#   A JSON object or array of objects to insert into the table. 
+#   The default value is "[{}]".
+#
+#  [-f|--field <field_name> <field_value>]
+#   A key-value pair to add to the newly inserted record(s). 
+#
+#   - If the key already exists, the value will be overwritten.
+#   If creating multiple records, the value will be applied to all records.
+#
+#   If the field name ends with "[]", the value will be appended to an array.
+#   If the field name ends with "{}", the value will be added to an object.
+#
+#   Example:
+#    Add a field "name" to all records
+#     --field name "John Doe"
+#
+#    Add the value "lorem-ipsum" to the array field "tags" in all records
+#     --field tags[] "lorem-ipsum"
+#
+#    Add the value "dolor-sit-amet" to the array field "tags" in the first record
+#     --field tags[]:0 "dolor-sit-amet"
+#
+#    Add the key/value pair "project_id: 123" to the object field "meta" in all records
+#     --field meta{} "project_id" "123"
+#
+#    Add the key/value pair "project_id: 456" to the object field "meta" in the first record
+#     --field meta{}:0 "project_id" "456"
+#
+# STDIN
+#  Standard input can be redirected to field value by setting if to '@-'. 
+#  Fields supporting this are "--json-data", "--field" and "--var".
+#
+#  This is useful when the value is too large to be passed as an argument and
+#  when the value is being piped from another command.
+#
+#  Example:
+#   echo "Hello, Im Bob! ..." | build users --field bio @-
+#
+# ERROR CODES
+#  1: Missing environment variable
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#
+# ENVIRONMENT
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+# SEE ALSO
+#  jq(1)
+
+if [ -z "$SH41_LIB" ]; then
+  log error -v name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+set -e
+export LOG_NAMESPACE=" ssorm.build"
+
+# shellcheck source=../../../../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../../../../_core/fn/stdin-or
+. "$SH41_LIB/_core/fn/stdin-or"
+# shellcheck source=../../../../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+
+# ╭───┤ Functions
+# ╰─
+
+jq_fill_missing_ids() {
+  pk_name=$1
+
+  jq --compact-output '.[]' \
+    | while IFS= read -r item; do
+        printf "%s" "$item" \
+          | jq \
+            --arg pk "$pk_name" \
+            --arg uuid "$(random uuid)" \
+              'if .[$pk] == null then . + { ($pk): $uuid } else . end'
+      done \
+    | jq --slurp --compact-output '.'
+}
+
+jq_ensure_is_array() {
+  jq 'if type == "array" then . else [.] end'
+}
+
+is_array_field() {
+  echo "$1" | grep -q "\[\]$"
+}
+
+is_object_field() {
+  echo "$1" | grep -q "{}$"
+}
+
+# Must start with a letter, contain only alphanumeric characters and hyphens
+is_valid_key() {
+  echo "$1" | grep -Eq "^[a-zA-Z][a-zA-Z0-9-]*$"
+}
+
+# ╭───┤ Input validation 
+# ╰─
+
+guard_missing_argument "<table>" "$1"
+table="$1"; shift
+
+ITEMS_JSON="[{}]"
+STDIN_DATA=$(stdin_or "")
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -jd|--json-data)
+      guard_missing_option_value "-jd|--json-data" "$2"
+      ITEMS_JSON=$2; shift
+
+      if [ "$ITEMS_JSON" = "@-" ]; then
+        ITEMS_JSON=$STDIN_DATA
+        guard_missing_option_stdin "-jd|--json-data" "$ITEMS_JSON"
+      fi
+
+      ITEMS_JSON=$(printf "%s" "$ITEMS_JSON" | jq_ensure_is_array)
+    ;;
+    -f|--field)
+      guard_missing_option_key "-f|--field" "$2"
+      name=$2; shift
+
+      # The index is an optional parameter at the end of the field name
+      # --field name:0 "John Doe"
+      index=$(printf "%s" "$name" | awk -F : '{print $2}')
+      if [ -n "$index" ]; then
+        name=$(printf "%s" "$name" | awk -F : '{print $1}')
+      fi
+
+      guard_missing_option_value "-f|--field $name" "$2"
+      value=$2; shift
+
+      if [ "$value" = "@-" ]; then 
+        value=$STDIN_DATA
+        guard_missing_option_stdin "-f|--field $name" "$value"
+      fi
+
+      field_file_path=""
+      case "$value" in
+        literal://*) value=${value#literal://} ;;
+        file://*)
+          field_file_path=${value#file://}
+          if [ ! -f "$field_file_path" ]; then
+            log error -v var "$key" -v file_path "$field_file_path" "File not found"
+            exit 2
+          fi
+        ;;
+      esac
+
+      if is_array_field "$name"; then
+        # Push to array field in all existing items
+        #  --field tags[] "lorem-ipsum"
+        #
+        # Push to array field in the specified item
+        #  --field tags[]:0 "lorem-ipsum"
+
+        name=$(printf "%s" "$name" | sed 's/\[\]$//')
+        # shellcheck disable=SC2016
+        jq_logic='if $index == null then 
+           map(. + { ($name): (.[$name] + [$value]) }) 
+         else 
+           if .[$index][$name] == null then
+             .[$index] += { ($name): [$value] }
+           else
+             .[$index][$name] += [$value]
+           end
+         end'
+
+        if [ -z "$field_file_path" ]; then
+          ITEMS_JSON=$(printf "%s" "$ITEMS_JSON" \
+            | jq --argjson index "${index:-null}" \
+              --arg name "$name" --arg value "$value" \
+              "$jq_logic")
+        else
+          ITEMS_JSON=$(printf "%s" "$ITEMS_JSON" \
+            | jq --argjson index "${index:-null}" \
+              --arg name "$name" --rawfile value "$field_file_path" \
+              "$jq_logic")
+        fi
+      elif is_object_field "$name"; then 
+        # Set a field in all existing items
+        #  --field meta{} "project_id" "123"
+        #
+        # Set a field in the specified item
+        #  --field meta{}:0 "project_id" "123"
+
+        name=$(printf "%s" "$name" | sed 's/{}$//')
+        obj_key=$value
+        obj_value=$2; shift
+
+        ITEMS_JSON=$(printf "%s" "$ITEMS_JSON" \
+          | jq --argjson index "${index:-null}" \
+            --arg name "$name" \
+            --arg key "$obj_key" --arg value "$obj_value" \
+            'if $index == null then 
+               map(. + { ($name): (.[$name] + { ($key): $value }) }) 
+             else 
+               if .[$index][$name] == null then
+                 .[$index] += { ($name): { ($key): $value } }
+               else
+                 .[$index][$name] += { ($key): $value }
+               end
+             end')
+      else
+        # Update all existing items added until now
+        #  --field name "John Doe"
+        #
+        # Update only the specified item 
+        #  --field name:0 "John Doe"
+
+        # shellcheck disable=SC2016
+        jq_logic='if $index == null then 
+           map(. + { ($name): $value }) 
+         else 
+           .[$index] += { ($name): $value } 
+         end'
+
+        if [ -z "$field_file_path" ]; then
+          ITEMS_JSON=$(printf "%s" "$ITEMS_JSON" \
+            | jq --argjson index "${index:-null}" \
+              --arg name "$name" --arg value "$value" \
+              "$jq_logic") 
+        else
+          ITEMS_JSON=$(printf "%s" "$ITEMS_JSON" \
+            | jq --argjson index "${index:-null}" \
+              --arg name "$name" --rawfile value "$field_file_path" \
+              "$jq_logic")
+        fi
+      fi
+    ;;
+   -v|--var)
+      guard_missing_option_key "-v|--var" "$2"
+      key=$2; shift
+
+      text_field=$(printf "%s" "$key" | awk -F : '{print $2}') 
+      if [ -z "$text_field" ]; then
+        log error -v var "$key" \
+          "Variable interpolation must target a text field, e.g. --var var_name:field_name"
+        exit 2
+      fi
+
+      index=$(printf "%s" "$key" | awk -F : '{print $3}') 
+      key=$(printf "%s" "$key" | awk -F : '{print $1}')
+      if ! is_valid_key "$key"; then
+        log error -v var "$key" \
+          "Variable names must start with a letter and contain only alphanumeric characters and hyphens"
+        exit 2
+      fi
+
+      guard_missing_option_value "-v|--var $key" "$2"
+      value=$2; shift
+
+      if [ "$value" = "@-" ]; then 
+        value=$STDIN_DATA
+        guard_missing_option_stdin "-v|--var $key" "$value"
+      fi
+
+      var_file_path=""
+      case "$value" in
+        literal://*) value=${value#literal://} ;;
+        file://*)
+          var_file_path=${value#file://}
+          if [ ! -f "$var_file_path" ]; then
+            log error -v var "$key" -v file_path "$var_file_path" "File not found"
+            exit 2
+          fi
+        ;;
+      esac
+
+      # shellcheck disable=SC2016
+      jq_logic='def interpolate($text; $key; $value):
+           $text | gsub("\\{\\{\\s*" + $key + "\\s*\\}\\}"; $value);
+
+         # If no index is specified, interpolate all records
+         if $index == null then
+           map(.[$text_field] = interpolate(.[$text_field]; $key; $value))
+         else
+           # Otherwise, interpolate only the specified record
+           if .[$index][$text_field] != null then
+             .[$index][$text_field] = interpolate(.[$index][$text_field]; $key; $value)
+           else
+             .
+           end
+         end'
+
+      if [ -z "$var_file_path" ]; then
+        ITEMS_JSON=$(printf "%s" "$ITEMS_JSON" \
+          | jq --argjson index "${index:-null}" \
+            --arg text_field "$text_field" \
+            --arg key "$key" --arg value "$value" \
+            "$jq_logic") 
+      else
+        ITEMS_JSON=$(printf "%s" "$ITEMS_JSON" \
+          | jq --argjson index "${index:-null}" \
+            --arg text_field "$text_field" \
+            --arg key "$key" --rawfile value "$var_file_path" \
+            "$jq_logic")
+      fi
+    ;;
+    --) shift; break ;;
+    -?*) guard_unknown_parameter "$1" ;;
+    *) break ;;
+  esac
+  shift
+done
+
+# ╭───┤ Main
+# ╰─
+
+pk_name=$(db-tables "$table" pk)
+with_ids=$(printf "%s" "$ITEMS_JSON" | jq_fill_missing_ids "$pk_name")
+pk_values=$(printf "%s" "$with_ids" \
+  | jq --raw-output "map(\"'\" + .[\"$pk_name\"] + \"'\") | join(\",\")")
+
+printf "%s" "$with_ids"
+
+log info \
+  -v table "$table" \
+  -v "$pk_name" "$pk_values" \
+  "Record(s) built successfully"

@@ -1,0 +1,119 @@
+#!/usr/bin/env sh
+
+# SYNOPSIS
+#  create <table_name> 
+#   [-sl|--select <select_filter=id>]
+#   [-m|--mode <mode=csv>]
+# 
+# DESCRIPTION
+#  Inserts a new record(s) into a specified table. The data for the new record
+#  can be provided as a JSON string or by setting the values of the fields 
+#  individually. 
+#
+# ARGUMENTS
+#  <table_name>
+#   The name of the table to insert the record(s) into.
+#
+# OPTIONS
+#  [-sl|--select <select_filter=id>]
+#   The columns to return from the newly inserted record(s). 
+#   The default value is "id".
+#
+#  [-m|--mode <mode=csv>]
+#   The output format from the underlying sqlite3 command. 
+#   The default value is "csv".
+#
+#  Example:
+#   echo "Hello, Im Bob!" | create users --field bio @-
+#
+# ERROR CODES
+#  1: Missing environment variable
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#  3: Sqlite3 failed to insert record(s)
+#
+# ENVIRONMENT
+#  SH41_DB_CONNECTION
+#   Path to the database file. 
+#
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+# SEE ALSO
+#  sqlite3(1), jq(1)
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_DB_CONNECTION" ]; then
+  log error -v var_name "\$SH41_DB_CONNECTION" "Missing environment variable"
+  exit 1
+fi
+
+if [ -z "$SH41_LIB" ]; then
+  log error -v name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+set -e
+export LOG_NAMESPACE=" ssorm.create"
+
+# shellcheck source=../../../../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../../../../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+
+# ╭───┤ Input validation 
+# ╰─
+
+guard_missing_argument "<table>" "$1"
+table="$1"; shift
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -sl|--select)
+      guard_missing_option_value "-sl|--select" "$2"
+      select_filter=$2; shift
+    ;;
+    -m|--mode)
+      guard_missing_option_value "-m|--mode" "$2"
+      mode=$2; shift
+    ;;
+    *) db_build_params="$db_build_params \"$1\"" ;;
+  esac
+  shift
+done
+
+# ╭───┤ Main
+# ╰─
+
+eval "set -- $db_build_params"
+items_json=$(db-build "$table" "$@" < /dev/stdin)
+
+mode=${mode:-csv}
+pk=$(db-tables "$table" pk)
+select_filter=${select_filter:-$pk}
+
+sql_ids=$(printf "%s" "$items_json" \
+  | jq --raw-output "map(\"'\" + .id + \"'\" ) | join(\",\")")
+sql_inserts=$(printf "%s" "$items_json" \
+  | json-to-sql-insert --table "$table")
+sql="BEGIN TRANSACTION;
+  $sql_inserts
+  SELECT $select_filter FROM $table WHERE $pk IN ($sql_ids);
+COMMIT;"
+
+if ! sqlite3 "-$mode" "$SH41_DB_CONNECTION" "$sql"; then
+  log error \
+    -v table "$table" \
+    -v "$pk" "$(echo "$sql_ids" | sed "s/'//g")" \
+    "Failed to create record(s)"
+  exit 3
+fi
+
+log info \
+  -v table "$table" \
+  -v "$pk" "$(echo "$sql_ids" | sed "s/'//g")" \
+  "Record(s) created"

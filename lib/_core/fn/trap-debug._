@@ -1,0 +1,69 @@
+#!/usr/bin/env sh
+
+# ╭───┤ Testing "trap_debug" function
+# │ Keep in mind that the tests are run in the same shebang AND the same
+# │ context as this file. This means that the functions and variables defined
+# │ in the file will be available in the COMMANDS YOU ARE TESTING and could
+# │ potentially collide with env vars they might use/need.
+# ╰─
+
+export LOG_NAMESPACE="󰙨 trap_debug"
+
+# shellcheck source=./test-runner
+. "$SH41_LIB/_core/fn/test-runner"
+
+# shellcheck source=./trap-debug
+. "$(dirname "$0")/$(basename "$0" .test)"
+
+# ╭───┤ Test cases
+# ╰─
+
+case1() {
+  TD_ROOT_PID=$$ TD_BASE_PATH=$(pwd) sh -c 'exit 1'
+}
+
+run_test \
+  --cmd "case1" \
+  --expect-stdout "Process call trace (1):" \
+  --expect-stdout "[$$]: exit 1" \
+  --given "Process exits with code 1" \
+  --when "Running a script that exits with error" \
+  --then "Print process call trace"
+
+case2() {
+  TD_ROOT_PID=$$ TD_BASE_PATH=$(pwd) sh -c 'exit 0'
+}
+
+run_test \
+  --cmd "case2" \
+  --expect-stdout "" \
+  --given "Process exits with code 0" \
+  --when "Running a script that exits without error" \
+  --then "Do not print anything"
+
+case3() {
+  TD_ROOT_PID=$$ TD_BASE_PATH=$(pwd) TD_BASE_PATH="$HOME" sh -c 'cd /tmp && exit 1'
+}
+
+run_test \
+  --cmd "case3" \
+  --expect-stdout "Process call trace (1):" \
+  --expect-stdout "[$$]: cd /tmp && exit 1" \
+  --given "Process exits with code 1 and changes directory" \
+  --when "Running a script that exits with error after changing directory" \
+  --then "Print process call trace with trimmed base path"
+
+case4() {
+  CI=1 TD_ROOT_PID=$$ TD_BASE_PATH=$(pwd) sh -c 'exit 1'
+}
+
+run_test \
+  --cmd "case4" \
+  --expect-stdout "Process call trace (1):" \
+  --expect-stdout "[$$]: exit 1" \
+  --given "Process exits with code 1 in CI environment" \
+  --when "Running a script that exits with error in CI" \
+  --then "Print process call trace without color codes"
+
+print_test_results
+

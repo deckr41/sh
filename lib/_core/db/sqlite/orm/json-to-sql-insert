@@ -1,0 +1,103 @@
+#!/usr/bin/env sh
+
+# SYNOPSIS
+#  json-to-sql-insert -t|--table <table_name>
+#
+# DESCRIPTION
+#  Converts a JSON object into an SQLite INSERT statement.
+#
+# OPTIONS
+#  -t|--table <table_name>
+#    The name of the table to insert the record into.
+#
+# STDIN
+#  The JSON item to transform into SQLite syntax. The keys of the JSON object
+#  should match the column names of the table.
+#  
+#  Can also accept an array of JSON objects, in which case it will output an
+#  INSERT statement for each object on a separate line.
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_DB_CONNECTION" ]; then
+  log error -v var_name "\$SH41_DB_CONNECTION" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+export LOG_NAMESPACE=" ssorm-json-to-sql-insert"
+
+# shellcheck source=../../../../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+
+# ╭───┤ Functions
+# ╰─
+
+to_sql() {
+  jq --raw-output --arg table "$1" \
+    "# Function to escape string for SQLite
+    def sqlite_escape:
+      if type == \"string\" then
+        \"'\" + gsub(\"'\"; \"''\") + \"'\"
+      elif type == \"array\" or type == \"object\" then
+        \"'\" + tojson + \"'\"
+      else
+        tostring
+      end;
+
+    def to_insert_statement:
+      to_entries |
+        map(.key) as \$keys |
+        map(.value | sqlite_escape) as \$values |
+      # Build SQL insert statement
+      \"INSERT INTO \(\$table) (\" +
+        (\$keys | join(\", \")) +
+      \") VALUES (\" +
+        (\$values | join(\", \")) +
+      \");\";
+
+    if type == \"array\" then
+      map(to_insert_statement) | .[]
+    else
+      to_insert_statement
+    end"
+}
+
+# ╭───┤ Input validation 
+# ╰─
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -t|--table)
+      if [ -z "$2" ]; then
+        log error -v option "$1" "Missing option value"
+        exit 1
+      fi
+      table=$2; shift
+    ;;
+    --) shift; break ;;
+    -?*) log error -v name "$1" "Unknown parameter"; exit 1 ;;
+    *) break ;;
+  esac
+  shift
+done
+
+if [ -z "$table" ]; then
+  log error -v var_name "table" "Missing required option"
+  exit 1
+fi
+
+# ╭───┤ Main
+# ╰─
+
+insert_statement=$(cat | to_sql "$table")
+if [ $? -ne 0 ]; then
+  log error -v jq_output "$insert_statement" "Invalid JSON input"
+  exit 2
+fi
+
+printf "%s\n" "$insert_statement"
+

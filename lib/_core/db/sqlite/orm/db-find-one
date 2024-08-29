@@ -1,0 +1,112 @@
+#!/usr/bin/env sh
+
+# NAME
+#  db-find-one - Find a single record in a table 
+#
+# SYNOPSIS
+#  db-find-one <table_name> 
+#   -w|--where <where_clause>
+#   [-m|--mode <mode="csv">]
+#   [...rest params are passed to db-find-many]
+#
+# DESCRIPTION
+#  Find a single record in a table by providing a sqlite WHERE clause. 
+#
+#  By default only the "id" field is returned, use "-s|--select" to specify
+#  which fields to return.
+#
+# ARGUMENTS
+#  <table_name>
+#   The table to query.
+#
+# OPTIONS
+#  -w, --where <where_clause>
+#   The WHERE clause to use when querying the database.
+#
+# ENVIRONMENT
+#  SH41_DB_CONNECTION
+#   Path to the database file. 
+#
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+# 
+# ERROR CODES
+#  1: Missing environment variable
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#  3: No items found in table with WHERE clause
+#  4: More than one item found in table with WHERE clause
+#
+# SEE ALSO
+#  jq(1)
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_DB_CONNECTION" ]; then
+  log error -v var_name "\$SH41_DB_CONNECTION" "Missing environment variable"
+  exit 1
+fi
+
+if [ -z "$SH41_LIB" ]; then
+  log error -v name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+set -e
+export LOG_NAMESPACE=" ssorm.find-one"
+
+# shellcheck source=../../../../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../../../../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+
+# ╭───┤ Input validation 
+# ╰─
+
+guard_missing_argument "<table>" "$1"
+table="$1"; shift
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -w|--where) 
+      guard_missing_option_value "-w|--where" "$2"
+      where=$2; shift
+    ;;
+    -m|--mode) 
+      guard_missing_option_value "-m|--mode" "$2"
+      mode=$2; shift
+    ;;
+    *) break ;;
+  esac
+  shift
+done
+
+guard_missing_option "-w|--where" "$where"
+
+# ╭───┤ Main
+# ╰─
+
+count=$(db-count "$table" --where "$where")
+
+if [ "$count" -eq 0 ]; then
+  log error -v table "$table" -v where "$where" "No records found" 
+  exit 3
+fi
+
+if [ "$count" -gt 1 ]; then
+  log error -v table "$table" -v where "$where" "More than one record found"
+  exit 4
+fi
+
+mode="${mode:-csv}"
+data=$(db-find-many "$table" --where "$where" --mode "$mode" "$@")
+
+if [ "$mode" = "json" ]; then
+  # In json mode, sqlite always returns an array
+  printf "%s" "$data" | jq -r '.[0]'
+else 
+  printf "%s\n" "$data"
+fi

@@ -1,0 +1,145 @@
+#!/usr/bin/env sh
+
+# NAME
+#  confirm - Fancy confirmation message powered by fzf
+#
+# SYNOPSIS
+#  confirm 
+#   [-wc|--with-cancel] 
+#   [-nc|--no-confirm]
+#   [-ac|--allow-custom] 
+#   [message]
+#
+# FLAGS 
+#  [-wc|--with-cancel]
+#   Add a "cancel" option to the confirmation message
+#
+#  [-nc|--no-confirm]
+#   Do not ask for confirmation, return "yes" immediately
+#
+#  [-ac|--allow-custom]
+#   Allow the user to input a custom text as an answer instead of the available
+#   options.
+#
+# ARGUMENTS
+#  [message=Confirm?]
+#   The question to ask for confirmation
+#
+# STDIN
+#  Does not use piped data.
+#
+# EXIT CODES
+#  0: "yes" options selected
+#  1: "no" selected or ctrl+c without --with-cancel
+#  2: "cancel" selected or ctrl+c with --with-cancel
+#  3: Custom answer without matching any options (with --allow-custom)
+#
+# EXAMPLES
+#  # Simple if/else
+#  if confirm; then
+#    echo "user confirmed" 
+#  fi
+#
+#  if confirm "Make it so?"; then
+#    echo "user confirmed" 
+#  fi
+#
+#  # Treat all 3 options
+#  response=$(confirm --with-cancel)
+#  case "$response" in
+#    yes) echo "Yes option selected" ;;
+#    no) echo "No option selected" ;;
+#    cancel) echo "Cancel option selected" ;;
+#  esac
+#
+#  # Treat custom non-matching response
+#  response=$(confirm --with-cancel --allow-custom)
+#  case "$response" in
+#    yes) echo "Yes option selected" ;;
+#    no) echo "No option selected" ;;
+#    cancel) echo "Cancel option selected" ;;
+#    *) echo "Custom answer: $response"
+#  esac
+#   
+# SEE ALSO
+#  choose(1), fzf(2)
+
+export LOG_NAMESPACE="󰭚 confirm"
+
+# ╭───┤ Functions 
+# ╰─
+
+parse_arguments() {
+  WITH_CANCEL=""
+  NO_CONFIRM=""
+  ALLOW_CUSTOM=""
+  CONFIRM_MESSAGE="Are you sure?"
+
+  while [ "$#" -gt 0 ]; do
+    case $1 in
+      -wc|--with-cancel)  WITH_CANCEL="true" ;;
+      -nc|--no-confirm) NO_CONFIRM="true" ;;
+      -ac|--allow-custom) ALLOW_CUSTOM="true" ;;
+      --) shift; break ;;
+      -*) fancy-log error -v name "$1" "Unknown parameter"; exit 1 ;;
+      *) CONFIRM_MESSAGE="$1"; break ;;
+    esac
+    shift
+  done
+}
+
+build_options() {
+  options="󰔓 yes
+󰔑 no"
+
+  if [ -n "$WITH_CANCEL" ]; then
+    options="${options}
+󰁯 cancel"
+  fi
+
+  echo "$options"
+}
+
+respond() {
+  answer="$1"
+
+  if [ -z "$answer" ]; then
+    if [ -n "$WITH_CANCEL" ]; then
+      printf "cancel"; exit 2
+    else
+      printf "no"; exit 1
+    fi
+  fi
+
+  case "$answer" in
+    yes) printf "yes"; exit 0 ;;
+    no) printf "no"; exit 1 ;;
+    cancel) printf "cancel"; exit 2 ;;
+    *) printf "%s" "$answer"; exit 3 ;;
+  esac
+}
+
+is_predefined_option() {
+  echo "$1" | grep --quiet "$2"
+}
+
+# ╭───┤ Main 
+# ╰─
+
+parse_arguments "$@"
+
+# Exit right away if in CI env or explicitly required
+if [ -n "$NO_CONFIRM" ] || [ -n "$CI" ]; then
+  respond "yes"
+fi
+
+options=$(build_options)
+answer=$(echo "$options" \
+  | choose --prompt "$CONFIRM_MESSAGE" ${ALLOW_CUSTOM:+--allow-custom})
+
+if is_predefined_option "$options" "$answer"; then
+  # Remove icon for easier parsing
+  answer=$(echo "$answer" | awk '{ print $2 }')
+fi
+
+respond "$answer"
