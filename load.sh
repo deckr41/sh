@@ -9,22 +9,33 @@
 # ╰─
 
 export SH41_HOME="$(dirname "$0")"
-export SH41_ICON="󱚥"
-export SH41_DEBUG=""
-
 export SH41_LIB="$SH41_HOME/lib"
 export SH41_BIN="$SH41_HOME/bin"
 export PATH="$SH41_BIN:$PATH"
 
-# ╭───────┤  User paths & configuration
+export LOG_NAMESPACE="󱚥 shell41"
+export LOG_LEVEL=info
+
+# ╭───────┤  User specific paths
 # ╰─
 
 export SH41_LOCAL="$XDG_DATA_HOME/shell41"
 export SH41_CACHE="$XDG_CACHE_HOME/shell41"
 export SH41_CONFIG_HOME="$XDG_CONFIG_HOME/shell41"
-export SH41_CONFIG_RC="$SH41_CONFIG_HOME/.sh41rc"
+export SH41_CONFIG_RC="$XDG_CONFIG_HOME/shell41/.sh41rc"
+export SH41_DB_BACKUPS="$SH41_LOCAL/db_backups"
 
-mkdir -p "$SH41_LOCAL" "$SH41_CACHE"
+mkdir -p "$SH41_LOCAL" "$SH41_CACHE" "$SH41_CONFIG_HOME" "$SH41_DB_BACKUPS"
+
+# Change the currently loggin user
+sh41_switch () {
+  selected_user_id=$(echo "TODO: use 'sh41 users find-many' and 'fzf' to select a user")
+
+  export SH41_USER_ID="$selected_user_id"
+}
+
+# ╭───────┤  Load user configuration
+# ╰─
 
 if [ -e "$SH41_CONFIG_RC" ]; then
   # shellcheck source=/dev/null

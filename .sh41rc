@@ -19,6 +19,7 @@ export SH41_DB="sqlite://$SH41_LOCAL/sh41.sqlite"
 # ╭───────┤ 󰘓 Keep it hidden, keep it safe! 
 # ╰─
 
-# shellcheck source=./.env
-. "$(dirname "$0")/.env"
-
+if [ -e "$(dirname "$0")/.env" ]; then
+  # shellcheck source=./.env
+  . "$(dirname "$0")/.env"
+fi
