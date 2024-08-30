@@ -1,0 +1,45 @@
+#!/usr/bin/env sh
+
+if ! db-exists agents --where "slug='semantic-commit-analyzer'"; then
+  db-create agents \
+    --field slug "semantic-commit-analyzer" \
+    --field name "Semantic Commit Analyzer" \
+  | db-create memories \
+    --field user_id "@-" \
+    --field priority "0" \
+    --field-from-file content "$(dirname "$0")/seed_commit-analyzer_mission.md" \
+    > /dev/null
+fi
+
+if ! db-exists agents --where "slug='posixer'"; then
+  db-create agents \
+    --field slug "posixer" \
+    --field name "The POSIX Scripter" \
+  | db-create memories \
+    --field user_id "@-" \
+    --field priority "0" \
+    --field-from-file content "$(dirname "$0")/seed_posixer_mission.md" \
+    > /dev/null
+fi
+
+if ! db-exists agents --where "slug='essence-extractor'"; then
+  db-create agents \
+    --field slug "essence-extractor" \
+    --field name "The Essence Extractor" \
+  | db-create memories \
+    --field user_id "@-" \
+    --field priority "0" \
+    --field-from-file content "$(dirname "$0")/seed_essence-extractor_mission.md" \
+    > /dev/null
+fi
+
+if ! db-exists agents --where "slug='universal-translator'"; then
+  db-create agents \
+    --field slug "universal-translator" \
+    --field name "The Universal Translator" \
+  | db-create memories \
+    --field user_id "@-" \
+    --field priority "0" \
+    --field-from-file content "$(dirname "$0")/seed_translator_mission.md" \
+    > /dev/null
+fi
