@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT NOT NULL PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Update "updated_at" when a record is updated
+DROP TRIGGER IF EXISTS users_UPDATE_updated_at;
+CREATE TRIGGER users_UPDATE_updated_at
+AFTER UPDATE ON users
+BEGIN
+  UPDATE users
+  SET updated_at = CURRENT_TIMESTAMP
+  WHERE id = NEW.id;
+END;

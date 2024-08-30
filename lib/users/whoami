@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+
+# NAME 
+#  whoami - Retrieve the currently logged in user
+#
+# ERROR CODES
+#  1: Missing environment variables
+#  2: User does not exist
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_LIB" ]; then
+  log error -v var_name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+export LOG_NAMESPACE="$LOG_NAMESPACE.whoami"
+
+# ╭───┤ Main
+# ╰─
+
+if ! db-find-one users --where "id='$SH41_USER_ID'" "$@"; then
+  exit 2
+fi

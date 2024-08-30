@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+
+default_user_slug=$(whoami)
+if ! db-exists users --where "slug='$default_user_slug'"; then
+  db-create users \
+    --field slug "$default_user_slug" \
+    --field name "$default_user_slug" \
+  | db-create memories \
+    --field user_id "@-" \
+    --field priority 0 \
+    --field-from-file content "$(dirname "$0")/default-user-description.md" \
+    > /dev/null
+fi
