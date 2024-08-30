@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 # SYNOPSIS
-#  conversations build 
+#  conversations create 
 #   [-t|--tag <tag_value>]
 #   [-m|--meta <meta_key> <meta_value>]
 #   [...rest | `db-create` $@]
@@ -39,7 +39,7 @@ fi
 # ╰─
 
 set -e
-export LOG_NAMESPACE="$LOG_NAMESPACE.build"
+export LOG_NAMESPACE="$LOG_NAMESPACE.create"
 
 # shellcheck source=../_core/fn/trap-debug
 . "$SH41_LIB/_core/fn/trap-debug"
@@ -70,7 +70,7 @@ while [ "$#" -gt 0 ]; do
         exit 2
       fi
 
-      db_build_params="$db_build_params --field tags[] \"$value\""
+      db_create_params="$db_create_params --field tags[] \"$value\""
     ;;
     -m|--meta)
       guard_missing_option_key "-m|--meta" "$2"
@@ -85,9 +85,9 @@ while [ "$#" -gt 0 ]; do
         exit 2
       fi
 
-      db_build_params="$db_build_params --field meta{} \"$key\" \"$value\""
+      db_create_params="$db_create_params --field meta{} \"$key\" \"$value\""
     ;;
-    *) db_build_params="$db_build_params \"$1\"" ;;
+    *) db_create_params="$db_create_params \"$1\"" ;;
   esac
   shift
 done
@@ -95,8 +95,8 @@ done
 # ╭───┤ Main
 # ╰─
 
-eval "set -- $db_build_params"
+eval "set -- $db_create_params"
 
-db-build conversations \
+db-create conversations \
   --field initiator_id "$SH41_USER_ID" \
   "$@" < /dev/stdin

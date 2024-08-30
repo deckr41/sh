@@ -14,9 +14,6 @@
 #  SHELL
 #   The path to the current shell executable
 
-# ╭───────┤ Shield wall!
-# ╰─
-
 if ! command -v git > /dev/null; then
   echo "Git is required to install shell41."
   exit 1

@@ -1,0 +1,153 @@
+#!/usr/bin/env sh
+
+# SYNOPSIS
+#  join 
+#   -cid|--conversation-id <conversation_id> 
+#   -p|--participant <role> <participant_id> 
+#   -ai|--auto-intro
+#   -nai|--no-auto-intro
+#
+# OPTIONS
+#  -cid|--conversation-id <conversation_id>
+#   The conversation id to join add the participants to
+#
+#  -p|--participant <role> <participant_id>
+#   Role and id of the participant to add to the conversation.
+#   
+#   The role can be either "user" or "agent".
+#
+#   The role can contain a "no-intro" suffix to prevent the automatic
+#   adding of user memories to the conversation. For example, "user:no-intro"
+#   or "agent:no-intro".
+#
+# ERROR CODES
+#  1: Missing environment variables
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#  
+# SEE ALSO
+#  jq(1)
+
+# ╭───┤ Shield wall!
+# ╰─
+
+if [ -z "$SH41_LIB" ]; then
+  log error -v var_name "\$SH41_LIB" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+set -e
+export LOG_NAMESPACE="$LOG_NAMESPACE.join"
+
+# shellcheck source=../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../_core/fn/stdin-or
+. "$SH41_LIB/_core/fn/stdin-or"
+# shellcheck source=../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+
+# ╭───┤ Functions
+# ╰─
+
+# ╭───┤ Argument parsing
+# ╰─
+
+stdin_data=$(stdin_or "")
+items_json="[]"
+cid=""
+introduce_participant="true"
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -ni|--no-intro) introduce_participant="" ;;
+    -i|--intro) introduce_participant="true" ;;
+
+    -cid|--conversation-id)
+      guard_missing_option_value "-cid|--conversation-id" "$2"
+      cid=$2; shift
+
+      if [ "$cid" = "@-" ]; then
+        cid=$stdin_data
+        guard_missing_option_stdin "-cid|--conversation-id" "$cid"
+      fi
+    ;;
+    -p|--participant)
+      guard_missing_option_key "-p|--participant" "$2"
+      role=$2; shift
+
+      if printf "%s" "$role" | grep -qv "user\|agent"; then 
+        log error \
+          -v option "\$role" -v value "$role" \
+          -v allowed_values "user,agent" \
+          "Invalid value"
+        exit 2
+      fi
+
+      guard_missing_option_value "-p|--participant" "$2"
+      participant_id=$2; shift
+
+      if [ "$participant_id" = "@-" ]; then
+        participant_id=$stdin_data
+        guard_missing_option_stdin "-p|--participant" "$CID"
+      fi
+
+      if [ -z "$participant_ids" ]; then
+        participant_ids="$role|$participant_id"
+      else
+        participant_ids="$participant_ids $role|$participant_id"
+      fi
+
+      if printf "%s" "$role" | grep -q "user"; then
+        items_json=$(printf "%s" "$items_json" \
+          | jq ". + [{\"user_id\": \"$participant_id\"}]")
+      else
+        items_json=$(printf "%s" "$items_json" \
+          | jq ". + [{\"agent_id\": \"$participant_id\"}]")
+      fi
+    ;;
+    --) shift; break ;;
+    -?*) guard_unknown_parameter "$1" ;;
+    *) break ;;
+  esac
+  shift
+done
+
+guard_missing_option "-cid|--conversation-id" "$cid"
+
+if [ "$items_json" = "[]" ]; then
+  log error -v option "-p|--participant" \
+    "Missing required option, at least one participant is required"
+  exit 2
+fi
+
+# ╭───┤ Main
+# ╰─
+
+printf "%s" "$items_json" \
+  | db-create conversations_participants \
+    --json-data "@-" \
+    --field conversation_id "$cid" > /dev/null
+
+echo "$cid"
+
+if [ -n "$introduce_participant" ]; then
+  for participant_pair in $participant_ids; do
+    role=$(printf "%s" "$participant_pair" | cut -d "|" -f 1)
+    participant_id=$(printf "%s" "$participant_pair" | cut -d "|" -f 2)
+
+    if printf "%s" "$role" | grep -q "no-intro"; then
+      continue
+    fi
+
+    db-find-many memories --mode json \
+      --where "user_id='$participant_id' AND priority=0" \
+      --select "content" \
+      | db-create messages \
+          --json-data "@-" \
+          --field "${role}_id" "$participant_id" \
+          --field conversation_id "$cid" \
+          --field role "intro" > /dev/null
+  done
+fi
