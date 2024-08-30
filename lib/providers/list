@@ -10,18 +10,17 @@
 #  SH41_LIB
 #   Path to SH41 internal lib directory.
 #
-#  SH41_LIB_PROVIDERS_BACKENDS
+#  SH41_PROVIDERS_BACKENDS
 #   Path to backends dir, interfaces with the 3rd party LLM providers.
 #
 #  SH41_ICON
 #   SH41 logo icon
 
-# log config
-export LOG_NAMESPACE="$SH41_ICON providers/list"
+export LOG_NAMESPACE="$LOG_NAMESPACE.send"
 
-# shellcheck source=../_fn/trap-debug
-. "$SH41_LIB/_fn/trap-debug"
+# shellcheck source=../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
 
-find "$SH41_LIB_PROVIDERS_BACKENDS" \
+find "$SH41_PROVIDERS_BACKENDS" \
   -mindepth 1 -type f -exec basename {} \; \
   | sort

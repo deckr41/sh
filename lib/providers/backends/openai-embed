@@ -1,0 +1,113 @@
+#!/usr/bin/env sh
+
+# NAME
+#  openai-embed - Interface for OpenAI's /v1/embeddings endpoint.
+#
+# SYNOPSIS
+#  openai-embed
+#
+# DESCRIPTION
+#  Low-level script calling the OpenAI API to generate the embeddings of the
+#  input text. 
+#
+#  See the OpenAI API reference for more details:
+#  https://platform.openai.com/docs/api-reference/embeddings/create
+#
+# STDIN
+#  The text to be sent to the provider for embedding.
+#
+# OPTIONS
+#  [--model <model=text-embedding-3-large>]
+#   The model to use for generating completions.
+#
+# ENVIRONMENT
+#  OPENAI_API_KEY
+#   The API key used for authenticating with the OpenAI API. 
+#
+#  OPENAI_ORG_ID
+#   The organization ID used for authenticating with the OpenAI API.
+#
+# ERROR CODES
+#  1: Missing environment variables
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#  3: CURL error - networking or API error
+# 
+# SEE ALSO
+#  curl(1), jq(1)
+
+if [ -z "$OPENAI_API_KEY" ]; then
+  log error -v var_name "\$OPENAI_API_KEY" "Missing environment variable"
+  exit 1
+fi
+
+# ╭───┤ Bootstrap
+# ╰─
+
+export LOG_NAMESPACE="$LOG_NAMESPACE.openai-embed"
+
+# shellcheck source=../../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+
+# ╭───┤ Input validation
+# ╰─
+
+model="text-embedding-3-large"
+encoding_format="float"
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -e|--encoding_format)
+      guard_missing_option_value "-e|--encoding_format" "$2"
+      encoding_format=$2; shift
+    ;;
+    -m|--model)
+      guard_missing_option_value "-m|--model" "$2"
+      model=$2; shift
+    ;;
+    --) shift; break ;;
+    -?*) guard_unknown_parameter "$1" ;;
+    *) break ;;
+  esac
+  shift
+done
+
+# ╭───┤ Main
+# ╰─
+
+log info \
+  -v model "$model" \
+  -v temperature "$encoding_format" \
+  "OpenAI provider settings"
+
+embeddings=$(jq --null-input --compact-output \
+  --rawfile input /dev/stdin \
+  --arg model "$model" \
+  --arg encoding_format "$encoding_format" \
+    '{
+      "input": $input,
+      "model": $model,
+      "encoding_format": $encoding_format
+    }' \
+  | curl \
+    --silent \
+    --data @- \
+    --show-error \
+    --fail-with-body \
+    --request POST \
+    --header "Content-Type: application/json" \
+    --header "Authorization: Bearer $OPENAI_API_KEY" \
+    --header "OpenAI-Organization: $OPENAI_ORG_ID" \
+      https://api.openai.com/v1/embeddings)
+
+if [ "$?" -ne 0 ]; then
+  exit 4
+fi
+
+printf "%s" "$embeddings" | jq '{
+  data: .data[0].embedding,
+  model: .model,
+  usage: .usage,
+}'
+

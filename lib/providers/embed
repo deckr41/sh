@@ -1,0 +1,97 @@
+#!/usr/bin/env sh
+
+# NAME
+#  embed - Create embeddings for a given text. 
+#
+# SYNOPSIS
+#  embed 
+#   -t|--to <provider_name> 
+#   [...provider specific arguments]
+#
+# DESCRIPTION
+#  - Provider specific argumest must passed after command options.
+#
+# OPTIONS
+#  -t|--to <provider_name>
+#   Name of the provider generating the embeddings.
+#   If a backend file is not defined for the given provider, an error is
+#   thrown.
+#
+# STDIN
+#  The text to be sent to the provider for embedding.
+#
+#  Example:
+#   echo "lorem ipsum" \
+#     | embed provider_name
+#
+# ENVIROMENT
+#  SH41_LIB
+#   Path to SH41 internal lib directory.
+#
+#  SH41_PROVIDERS_BACKENDS
+#   Path to backends dir, interfaces with the 3rd party LLM providers.
+
+# ╭───┤ Bootstrap
+# ╰─
+
+set -e
+export LOG_NAMESPACE="$LOG_NAMESPACE.embed"
+
+# shellcheck source=../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
+# shellcheck source=../_core/fn/stdin-or
+. "$SH41_LIB/_core/fn/stdin-or"
+
+# ╭───┤ Input validation 
+# ╰─
+
+text=""
+stdin_data=$(stdin_or "")
+
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    -d|--data)
+      guard_missing_option_value "-d|--data" "$2"
+      text=$2; shift
+
+      if [ "$text" = "@-" ]; then
+        text=$stdin_data
+        guard_missing_option_stdin "-d|--data" "$text"
+      fi
+    ;;
+    -t|--to)
+      guard_missing_option_value "-t|--to" "$2"
+      PROVIDER_NAME=$2; shift
+      PROVIDER_PATH="$SH41_PROVIDERS_BACKENDS/${PROVIDER_NAME}_embed"
+
+      if [ ! -f "$PROVIDER_PATH" ]; then
+        log error \
+          -v to "$PROVIDER_NAME" \
+          -v path "$PROVIDER_PATH" \
+          "Provider embeddings backend not found"
+        exit 3
+      fi
+    ;;
+    *) break ;;
+  esac
+  shift
+done
+
+guard_missing_option "-t|--to" "$PROVIDER_NAME"
+
+text=${text:-$stdin_data}
+if [ -z "$text" ]; then
+  log error -v to "$PROVIDER_NAME" \
+    "No text provided, use -d|--data or pipe text to the command"
+  exit 2
+fi
+
+# ╭───┤ Main
+# ╰─
+
+log info -v to "$PROVIDER_NAME" \
+  "Sending text for embedding"
+
+printf "%s" "$text" | "$PROVIDER_PATH" "$@" \

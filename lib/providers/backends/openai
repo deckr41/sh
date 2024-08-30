@@ -4,7 +4,7 @@
 #  openai-send - Interface for OpenAI's /chat/completions endpoint.
 #
 # SYNOPSIS
-#  openai-send <-m|--messages> <messages> [--no-stream] 
+#  openai-send
 #
 # DESCRIPTION
 #  Low-level script calling the OpenAI API to get completions for a given
@@ -13,24 +13,24 @@
 #  See the OpenAI API reference for more details:
 #  https://platform.openai.com/docs/api-reference/chat
 #
+# STDIN
+#  JSON array of objects with `role` and `content` fields.
+#
 # OPTIONS
-#  -t|--temperature <temperature=0.7>
+#  -m|--model <model>
+#   The model to use for generating completions.
+#
+#  -mt|--max-tokens <max_tokens>
+#   The maximum number of tokens to generate in the completion.
+#
+#  [-t|--temperature <temperature=0.7>]
 #   The sampling temperature to use when generating completions.
 #   Higher values mean the model will take more risks.
 #
-#  --model <model=gpt-4-turbo-preview>
-#   The model to use for generating completions.
-#
-#  -m|--messages <messages>
-#   JSON array of objects with `role` and `content` fields.
-#
-#  --no-stream
+#  [--no-stream]
 #   Disable streaming response.
 #
-#  --debug
-#   Enable debug mode.
-#
-#  --raw
+#  [--raw]
 #   Output raw response from OpenAI without any processing
 #
 # ENVIRONMENT
@@ -42,39 +42,26 @@
 #
 # ERROR CODES
 #  1: Missing environment variables
-#  2: Missing OS dependency
-#  3: Invalid input - parsing error of stdin, argument or flag parsing
-#  4: CURL error - networking or API error
+#  2: Invalid input - parsing error of stdin, argument or flag parsing
+#  3: CURL error - networking or API error
 # 
 # SEE ALSO
 #  curl(1), jq(1)
 
-# ╭───┤ Bootstrap
-# ╰─
-
-# shellcheck source=../../_fn/trap-debug
-. "$SH41_LIB/_fn/trap-debug"
-
-# log config
-export LOG_NAMESPACE="$SH41_ICON openai-send"
-
-# ╭───┤ Dependency check
-# ╰─ 
-
 if [ -z "$OPENAI_API_KEY" ]; then
-  log error "missing required environment variable OPENAI_API_KEY"
+  log error -v var_name "\$OPENAI_API_KEY" "Missing environment variable"
   exit 1
 fi
 
-if ! command -v "jq" >/dev/null 2>&1; then
-  log error "jq is required to run this script"
-  exit 2
-fi
+# ╭───┤ Bootstrap
+# ╰─
 
-if ! command -v "curl" >/dev/null 2>&1; then
-  log error "curl is required to run this script"
-  exit 2
-fi
+export LOG_NAMESPACE="$LOG_NAMESPACE.openai-send"
+
+# shellcheck source=../../_core/fn/trap-debug
+. "$SH41_LIB/_core/fn/trap-debug"
+# shellcheck source=../../_core/fn/validation-utils
+. "$SH41_LIB/_core/fn/validation-utils"
 
 # ╭───┤ Functions
 # ╰─
@@ -108,17 +95,14 @@ extract_content() {
     '.choices[0].message.content // .'
 }
 
-# Transform SH41 prompt to the OpenAI compatible message schema.
+# Transform SH41 shape to OpenAI's message schema.
 # 
 # From:
-# {
-#   conversation_id: "uuid",
-#   messages: [{
+#  [{
 #     role: "context" | "prompt" | "file" | "system_main-agent-mission" | "system_main-user-mission",
 #     path: "string" | null,
 #     content: "string"
-#   }]
-# }
+#  }]
 #
 # To:
 #  [{
@@ -127,15 +111,15 @@ extract_content() {
 #  }]
 mutate() {
   jq \
-    'def toOpenAIRole:
-      if . == "context" or (. | test("^system_")) or . == "file"
+   'def toOpenAIRole($role):
+      if $role == "context" or $role == "file" or ($role | test("^system_")) 
       then "system"
-      else "user"
+      else $role
     end;
 
-    .messages | map(
+    . | map(
       {
-        role: .role | toOpenAIRole,
+        role: toOpenAIRole(.role // "user"),
         content: .content
       }
     )'
@@ -146,52 +130,35 @@ mutate() {
 
 should_stream="true"
 should_output_raw=""
-is_debug="$SH41_DEBUG"
-model="gpt-4o"
+model=""
+max_tokens=""
 temperature="0.7"
-max_tokens="4096"
 
 while [ "$#" -gt 0 ]; do
   case $1 in
-    --raw)
-      should_output_raw="true"
-    ;;
-    --debug)
-      is_debug="true"
-    ;;
-    --no-stream)
-      should_stream=""
-    ;;
+    --raw) should_output_raw="true" ;;
+    --no-stream) should_stream="" ;;
     -mt|--max-tokens)
-      if [ "$2" ] && [ "${2#-}" = "$2" ]; then
-        max_tokens=$2; shift
-      else
-        log error "-mt|--max-tokens requires a value." >&2
-        exit 3
-      fi
+      guard_missing_option_value "-mt|--max-tokens" "$2"
+      max_tokens=$2; shift
     ;;
     -t|--temperature)
-      if [ "$2" ] && [ "${2#-}" = "$2" ]; then
-        temperature=$2; shift
-      else
-        log error "-t|--temperature requires a value." >&2
-        exit 3
-      fi
+      guard_missing_option_value "-t|--temperature" "$2"
+      temperature=$2; shift
     ;;
     -m|--model)
-      if [ "$2" ] && [ "${2#-}" = "$2" ]; then
-        model=$2; shift
-      else
-        log error "-m|--model requires a value." >&2
-        exit 3
-      fi
+      guard_missing_option_value "-m|--model" "$2"
+      model=$2; shift
     ;;
     --) shift; break ;;
-    -?*) log error "Unknown flag: $1" >&2; exit 153 ;;
+    -?*) guard_unknown_parameter "$1" ;;
     *) break ;;
   esac
   shift
 done
+
+guard_missing_argument "-m|--model" "$model"
+guard_missing_argument "-mt|--max-tokens" "$max_tokens"
 
 # ╭───┤ Main
 # ╰─
@@ -205,12 +172,12 @@ else
   curl_stream_flags="--silent"
 fi
 
-if [ -n "$is_debug" ]; then 
-  log info "should_stream: $should_stream"
-  log info "should_output_raw: $should_output_raw"
-  log info "temperature: $temperature"
-  log info "model: $model"
-fi
+log info \
+  -v model "$model" \
+  -v temperature "$temperature" \
+  -v stream "$should_stream" \
+  -v max_tokens "$max_tokens" \
+  "OpenAI provider settings"
 
 curl_stderr_tmp=$(mktemp -t sh41_openai-send_stderr-XXXXXX)
 curl_exit_code_tmp=$(mktemp -t sh41_openai-send_exit-code-XXXXXX)

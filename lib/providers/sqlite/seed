@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+
+if ! db-exists providers --where "slug='openai-gpt4o'"; then
+  db-create providers \
+    --field slug "openai-gpt4o" \
+    --field name "OpenAI GPT4o" \
+    --field backend "openai" \
+    --field model "gpt-4o" \
+    --field max_input_token_count 128000 \
+    --field max_input_message_length 1048576 \
+    --field max_output_token_count 4096 \
+    > /dev/null
+fi
