@@ -41,7 +41,7 @@ if [ -e "$SH41_CONFIG_RC" ]; then
   # shellcheck source=/dev/null
   . "$SH41_CONFIG_RC"
 else
-  "$SH41_LIB/_scripts/log" error \
+  "$SH41_LIB/_core/scripts/log" error \
     -v config_path "$SH41_CONFIG_RC" \
     -v init_script "sh41 init" \
     "Configuration file not found, please run the init script manually."
